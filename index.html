@@ -470,6 +470,7 @@
         <div style="display:flex;align-items:center;gap:6px;">
           <span class="badge" id="analysisBadge" style="display:none;">等待计算</span>
           <button class="btn btn-sm" onclick="document.getElementById('ocrInput').click()" title="上传图片识别投注" style="font-size:.65rem;">📷 OCR</button>
+          <button class="btn btn-sm" onclick="setupOCR()" title="设置 OCR 方式" style="font-size:.65rem;">⚙️</button>
           <button class="btn btn-sm" onclick="showTextImport()" title="粘贴文本导入" style="font-size:.65rem;">📝 文本</button>
           <input type="file" id="ocrInput" accept="image/*,.heic,.heif" style="display:none" onchange="ocrRecognize(event)">
         </div>
@@ -842,10 +843,15 @@ function importData(event) {
   const file = event.target.files[0];
   if (!file) return;
   const ext = file.name.split('.').pop().toLowerCase();
+  // Also detect CSV by MIME type
+  const isCSV = ext === 'csv' || file.type === 'text/csv' || file.type === 'text/plain';
+  const isJSON = ext === 'json';
+  if (!isCSV && !isJSON) { showToast('⚠️ 不支持的文件格式: .' + ext + '，请使用 .csv 或 .json', 4000); event.target.value = ''; return; }
+  showToast('⏳ 正在导入 ' + file.name + '...', 0);
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      if (ext === 'json') {
+      if (isJSON) {
         const data = JSON.parse(e.target.result);
         if (!data || !data.version) throw Error('无效JSON格式');
         let conflicts = [];
@@ -854,12 +860,12 @@ function importData(event) {
             if (_manualScores[mid]) {
               const s = data.manualScores[mid];
               if (_manualScores[mid].ftH !== s.ftH || _manualScores[mid].ftA !== s.ftA)
-                conflicts.push(`手动比分 ${mid}: 冲突`);
+                conflicts.push('手动比分 ' + mid + ': 冲突');
             }
           });
         }
         if (data.savedRecords) {
-          data.savedRecords.forEach(r => { if (savedRecords.some(x => x.id === r.id)) conflicts.push(`记录 ${r.label}: 已存在`); });
+          data.savedRecords.forEach(function(r) { if (savedRecords.some(function(x) { return x.id === r.id; })) conflicts.push('记录 ' + r.label + ': 已存在'); });
         }
         if (conflicts.length && !confirm(`发现 ${conflicts.length} 处冲突，确定覆盖？\n取消则跳过冲突项`)) {
           showToast('已取消', 1500); event.target.value = ''; return;
@@ -876,28 +882,35 @@ function importData(event) {
         }
         clearSelectedMatch(); renderAll();
         showToast('✅ JSON 数据已导入', 2000);
-      } else if (ext === 'csv') {
+      } else if (isCSV) {
         // CSV import
-        const text = e.target.result;
-        const sections = text.split('\n===');
+        var text = e.target.result;
+        // Remove BOM character
+        text = text.replace(/^\uFEFF/, '');
+        var sections = text.split('\n===');
         sections.forEach(section => {
           const lines = section.trim().split('\n');
           if (lines.length < 2) return;
-          const header = lines[0].trim();
+          const header = lines[0].trim().replace(/^===\s*|\s*===$/g, '');
           const dataLines = lines.slice(1).map(l => {
             const parts = []; let cur = '', inQ = false;
             for (const c of l) { if (c === '"') inQ = !inQ; else if (c === ',' && !inQ) { parts.push(cur.trim()); cur = ''; } else cur += c; }
             parts.push(cur.trim());
             return parts;
           });
-          if (header === '=== 赛程 ===' || header === '赛程') {
-            // Matches - skip import as they come from API
-          } else if (header === '=== 手动比分 ===' || header === '手动比分') {
+          if (header === '赛程') {
+            // Store match dates from CSV for later filtering
+            var csvMatches = {};
+            dataLines.forEach(function(p) {
+              if (p[0] && p[6]) csvMatches[p[0]] = new Date(p[6]);
+            });
+            window._csvMatchDates = csvMatches;
+          } else if (header === '手动比分') {
             dataLines.forEach(p => {
               if (p[0]) _manualScores[p[0]] = { htH: parseInt(p[1])||0, htA: parseInt(p[2])||0, ftH: parseInt(p[3])||0, ftA: parseInt(p[4])||0 };
             });
             saveManualScores();
-          } else if (header === '=== 投注记录 ===' || header === '投注记录') {
+          } else if (header === '投注记录') {
             const betsByRec = new Map();
             dataLines.forEach(p => {
               const id = p[0]; if (!id) return;
@@ -906,7 +919,7 @@ function importData(event) {
             });
             betsByRec.forEach(rec => { if (!savedRecords.some(x => x.id === rec.id)) savedRecords.push(rec); });
             try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); } catch(e) {}
-          } else if (header === '=== 回收站 ===' || header === '回收站') {
+          } else if (header === '回收站') {
             const betsByRec = new Map();
             dataLines.forEach(p => {
               const id = p[0]; if (!id) return;
@@ -917,7 +930,11 @@ function importData(event) {
             try { localStorage.setItem(TRASH_KEY, JSON.stringify(trashRecords)); } catch(e) {}
           }
         });
-        clearSelectedMatch(); renderAll();
+        clearSelectedMatch();
+        document.getElementById('tabRecords')._showAll = true;
+        renderAll();
+        // Clear csvMatchDates after use
+        window._csvMatchDates = null;
         showToast('✅ CSV 数据已导入', 2000);
       } else {
         showToast('⚠️ 不支持的文件格式，请使用 .csv 或 .json', 3000);
@@ -926,8 +943,7 @@ function importData(event) {
       showToast('❌ 导入失败: '+err.message, 3000);
     }
   };
-  if (ext === 'csv') reader.readAsText(file);
-  else reader.readAsText(file);
+  reader.readAsText(file);
   event.target.value = '';
 }
 
@@ -1341,132 +1357,179 @@ function getEffScores(mid) {
 }
 
 // OCR image recognition + text import for bet slips
-async function preprocessImage(file) {
-  // Convert to grayscale and enhance contrast for better OCR
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      // Resize if too large
-      let w = img.width, h = img.height;
-      const maxDim = 2000;
-      if (w > maxDim || h > maxDim) { const s = maxDim / Math.max(w, h); w *= s; h *= s; }
-      canvas.width = w; canvas.height = h;
-      ctx.drawImage(img, 0, 0, w, h);
-      // Get image data, enhance contrast
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-        // Simple contrast enhancement
-        const contrast = gray > 128 ? Math.min(255, gray * 1.3) : Math.max(0, gray * 0.7);
-        data[i] = data[i+1] = data[i+2] = contrast;
-      }
-      ctx.putImageData(imageData, 0, 0);
-      canvas.toBlob(blob => resolve(new File([blob], 'processed.jpg', {type:'image/jpeg'})), 'image/jpeg', 0.9);
-    };
-    img.src = URL.createObjectURL(file);
+// OCR: Google Cloud Vision API (with Tesseract fallback)
+var _ocrProvider = '';
+var _ocrKey = '';
+var _ocrSecret = '';
+try { var p = localStorage.getItem('ocr_provider'); if (p) _ocrProvider = p; } catch(e) {}
+try { var k = localStorage.getItem('ocr_key'); if (k) _ocrKey = k; } catch(e) {}
+try { var s = localStorage.getItem('ocr_secret'); if (s) _ocrSecret = s; } catch(e) {}
+function setupOCR() {
+  var choice = prompt('选择 OCR 识别方式：\n1 - 百度 OCR（推荐，国内可用）\n2 - Google Cloud Vision\n3 - Tesseract.js（本地）\n0 - 取消', '1');
+  if (choice === '1') {
+    var key = prompt('请输入百度 OCR API Key：', _ocrKey || '');
+    if (!key || !key.trim()) return;
+    var secret = prompt('请输入百度 OCR Secret Key：', _ocrSecret || '');
+    if (!secret || !secret.trim()) return;
+    _ocrProvider = 'baidu'; _ocrKey = key.trim(); _ocrSecret = secret.trim();
+    try { localStorage.setItem('ocr_provider', 'baidu'); localStorage.setItem('ocr_key', _ocrKey); localStorage.setItem('ocr_secret', _ocrSecret); } catch(e) {}
+    showToast('百度 OCR 已设置', 1500);
+  } else if (choice === '2') {
+    var key = prompt('请输入 Google Cloud Vision API Key：', _ocrKey || '');
+    if (key && key.trim()) { _ocrProvider = 'google'; _ocrKey = key.trim(); try { localStorage.setItem('ocr_provider', 'google'); localStorage.setItem('ocr_key', _ocrKey); } catch(e) {} showToast('Google Vision 已设置', 1500); }
+  } else if (choice === '3') {
+    _ocrProvider = 'tesseract'; try { localStorage.setItem('ocr_provider', 'tesseract'); } catch(e) {} showToast('Tesseract 已选择', 1500);
+  }
+}
+// Quick-set Baidu OCR keys (call from console or use ⚙️ button)
+function setBaiduKeys(apiKey, secretKey) {
+  _ocrProvider = 'baidu'; _ocrKey = apiKey; _ocrSecret = secretKey;
+  try { localStorage.setItem('ocr_provider', 'baidu'); localStorage.setItem('ocr_key', _ocrKey); localStorage.setItem('ocr_secret', _ocrSecret); } catch(e) {}
+  showToast('百度 OCR 已配置', 1500);
+}
+function base64FromBlob(blob) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onload = function() { resolve(reader.result.split(',')[1]); };
+    reader.readAsDataURL(blob);
   });
 }
 async function ocrRecognize(event) {
-  const file = event.target.files[0];
+  var file = event.target.files[0];
   if (!file) return;
-  showToast('⏳ 正在处理图片...', 0);
+  showToast('⏳ 正在识别...', 0);
   try {
-    let imgFile = file;
-    // HEIC to JPEG if needed
-    const ext = file.name.split('.').pop().toLowerCase();
+    var imgFile = file;
+    // HEIC conversion
+    var ext = file.name.split('.').pop().toLowerCase();
     if ((ext === 'heic' || ext === 'heif') && typeof heic2any !== 'undefined') {
       showToast('⏳ 转换 HEIC...', 0);
-      const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+      var blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
       imgFile = new File([blob], 'image.jpg', { type: 'image/jpeg' });
     }
-    // Preprocess: enhance contrast for better OCR
-    showToast('⏳ 增强图像对比度...', 0);
-    imgFile = await preprocessImage(imgFile);
-    let text = '';
-    if (typeof Tesseract !== 'undefined') {
-      showToast('⏳ OCR 识别中...', 0);
-      const result = await Tesseract.recognize(imgFile, 'chi_sim+eng');
-      text = result.data.text;
-    } else {
-      showToast('⚠️ OCR库未加载', 2000);
-    }
-    if (text && text.trim().length >= 5) {
-      showToast(`✅ 识别到 ${text.length} 字符`, 1000);
-      // Show raw text for editing, then parse + save on confirm
-      document.getElementById('importPreview').innerHTML = `<div id="ocrViewToggle" style="margin-bottom:6px;">
-        <button class="btn btn-sm" onclick="switchOcrView('raw')" id="ocrViewRawBtn" style="font-size:.7rem;border-color:var(--accent);">📄 原文</button>
-        <button class="btn btn-sm" onclick="switchOcrView('parsed')" id="ocrViewParsedBtn" style="font-size:.7rem;">🔍 解析</button>
-      </div>
-      <div id="ocrRawView"><textarea id="ocrRawText" style="width:100%;height:220px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.78rem;padding:8px;font-family:inherit;resize:vertical;box-sizing:border-box;">${text}</textarea></div>
-      <div id="ocrParsedView" style="display:none;font-size:.8rem;max-height:250px;overflow-y:auto;"></div>
-      <div style="font-size:.72rem;color:var(--text2);margin-top:4px;">原文可编辑，点击「解析」预览，确认后自动保存</div>`;
-      document.getElementById('importSummary').textContent = '';
-      // Show raw text for editing, then parse + save on confirm
-      document.getElementById('importConfirmBtn').textContent = '✓ 确认导入';
-      document.getElementById('importConfirmBtn').onclick = function() {
-        const edited = document.getElementById('ocrRawText').value;
-        if (!edited || !edited.trim()) { showToast('内容为空', 1500); return; }
-        const records = parseOcrText(edited);
-        if (records.length) {
-          records.forEach(r => savedRecords.unshift({ id:Date.now()+Math.random(), label: r.label||'OCR导入', time:new Date().toISOString(), bets:r.bets, passType:r.passType, group:'' }));
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); } catch(e) {}
-          closeImportDialog();
-          renderRecords();
-          showToast(`✅ 已导入 ${records.length} 条记录 (${records.reduce((s,r)=>s+r.bets.length,0)} 项)`, 3000);
+    var text = '';
+    // Try API-based OCR first (may fail due to CORS - fallback to Tesseract)
+    try {
+      if (_ocrProvider === 'baidu' && _ocrKey && _ocrSecret) {
+        showToast('⏳ 调用百度 OCR...', 0);
+        var b64 = await base64FromBlob(imgFile);
+        var tokenResp = await fetch('https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=' + encodeURIComponent(_ocrKey) + '&client_secret=' + encodeURIComponent(_ocrSecret));
+        var tokenData = await tokenResp.json();
+        var token = tokenData.access_token;
+        if (!token) throw new Error(tokenData.error_description || '获取百度 token 失败');
+        var ocrResp = await fetch('https://aip.baidubce.com/rest/2.0/ocr/v1/accurate?access_token=' + encodeURIComponent(token), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'image=' + encodeURIComponent(b64)
+        });
+        var ocrResult = await ocrResp.json();
+        if (ocrResult.words_result) {
+          text = ocrResult.words_result.map(function(w) { return w.words; }).join('\n');
         } else {
-          showToast('⚠️ 未能识别出投注内容，已复制到剪贴板', 3000);
+          var basicResp = await fetch('https://aip.baidubce.com/rest/2.0/ocr/v1/general_basic?access_token=' + encodeURIComponent(token), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'image=' + encodeURIComponent(b64)
+          });
+          var basicResult = await basicResp.json();
+          if (basicResult.words_result) text = basicResult.words_result.map(function(w) { return w.words; }).join('\n');
+          else throw new Error(basicResult.error_msg || '百度OCR识别失败');
         }
-      };
-      window._pendingImport = null;
-      document.getElementById('importDialog').classList.add('show');
+      } else if (_ocrProvider === 'google' && _ocrKey) {
+        showToast('⏳ 调用 Google Vision...', 0);
+        var b64 = await base64FromBlob(imgFile);
+        var resp = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + encodeURIComponent(_ocrKey), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests: [{ image: { content: b64 }, features: [{ type: 'TEXT_DETECTION', maxResults: 1 }] }] })
+        });
+        var result = await resp.json();
+        if (result.responses && result.responses[0] && result.responses[0].textAnnotations) text = result.responses[0].textAnnotations[0].description || '';
+        else if (result.error) throw new Error(result.error.message);
+      }
+    } catch(e) {
+      console.warn('API OCR failed:', e.message);
+      showToast('⚠️ API OCR 失败，尝试本地识别...', 2000);
+    }
+    // Fallback to Tesseract
+    if (!text && typeof Tesseract !== 'undefined') {
+      showToast('⏳ Tesseract 识别中...', 0);
+      var tessResult = await Tesseract.recognize(imgFile, 'chi_sim+eng');
+      text = tessResult.data.text;
     } else {
-      const manual = prompt('OCR 未能识别出有效文字。\n请手动粘贴投注内容：\n(例如: 阿根廷 VS 法国 胜)');
+      showToast('⚠️ 未设置 OCR，请点击设置', 2000);
+    }
+    if (text && text.trim().length >= 3) {
+      showToast('✅ 识别到 ' + text.length + ' 字符', 1000);
+      showOcrConfirm(text);
+    } else {
+      var manual = prompt('OCR 未能识别出有效文字。\n请手动粘贴投注内容：\n(可使用 📝 文本 按钮)');
       if (manual && manual.trim()) processImportedText(manual, '手动');
       else showToast('已取消', 1500);
     }
   } catch(e) {
     console.error('OCR error:', e);
-    const manual = prompt('OCR 出错: '+e.message+'\n\n请手动粘贴投注内容：');
+    var manual = prompt('OCR 出错: ' + e.message + '\n\n请手动粘贴投注内容：');
     if (manual && manual.trim()) processImportedText(manual, '手动');
     else showToast('已取消', 1500);
   }
   event.target.value = '';
 }
+// Show OCR confirmation dialog with raw text
+function showOcrConfirm(text) {
+  document.getElementById('importPreview').innerHTML = '<div style="margin-bottom:4px;">' +
+    '<button class="btn btn-sm" onclick="showOcrRaw()" id="ocrRawBtn" style="font-size:.7rem;border-color:var(--accent);">📄 原文</button>' +
+    '<button class="btn btn-sm" onclick="showOcrParsed()" id="ocrParseBtn" style="font-size:.7rem;">🔍 解析</button>' +
+    '</div>' +
+    '<div id="ocrRawView"><textarea id="ocrRawText" style="width:100%;height:220px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:.78rem;padding:8px;font-family:inherit;resize:vertical;box-sizing:border-box;">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea></div>' +
+    '<div id="ocrParsedView" style="display:none;font-size:.8rem;max-height:250px;overflow-y:auto;"></div>' +
+    '<div style="font-size:.72rem;color:var(--text2);margin-top:4px;">原文可编辑，确认后自动解析保存</div>';
+  document.getElementById('importSummary').textContent = '';
+  document.getElementById('importConfirmBtn').textContent = '✓ 确认导入';
+  document.getElementById('importConfirmBtn').onclick = function() {
+    var edited = document.getElementById('ocrRawText').value;
+    if (!edited || !edited.trim()) { showToast('内容为空', 1500); return; }
+    var records = parseOcrText(edited);
+    if (records.length) {
+      records.forEach(function(r) { savedRecords.unshift({ id:Date.now()+Math.random(), label: r.label||'OCR导入', time:new Date().toISOString(), bets:r.bets, passType:r.passType, group:'' }); });
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); } catch(e) {}
+      closeImportDialog();
+      renderRecords();
+      showToast('✅ 已导入 ' + records.length + ' 条记录', 3000);
+    } else {
+      showToast('⚠️ 未能识别出投注内容', 3000);
+    }
+  };
+  window._pendingImport = null;
+  document.getElementById('importDialog').classList.add('show');
+}
+function showOcrRaw() { document.getElementById('ocrRawView').style.display=''; document.getElementById('ocrParsedView').style.display='none'; document.getElementById('ocrRawBtn').style.borderColor='var(--accent)'; document.getElementById('ocrParseBtn').style.borderColor='var(--border)'; }
+function showOcrParsed() {
+  document.getElementById('ocrRawView').style.display='none'; document.getElementById('ocrParsedView').style.display='';
+  document.getElementById('ocrRawBtn').style.borderColor='var(--border)'; document.getElementById('ocrParseBtn').style.borderColor='var(--accent)';
+  var raw = document.getElementById('ocrRawText').value;
+  var records = parseOcrText(raw);
+  var el = document.getElementById('ocrParsedView');
+  if (records.length) {
+    var html = '';
+    records.forEach(function(r, i) {
+      var mids = [...new Set(r.bets.map(function(b) { return b.matchId; }))];
+      html += '<div style="margin-bottom:6px;padding:4px 6px;background:var(--surface2);border-radius:4px;"><div style="font-weight:600;font-size:.76rem;">记录 '+(i+1)+': '+r.passType+' · '+mids.length+' 场</div>';
+      mids.forEach(function(mid) {
+        var m = getMatch(mid);
+        var picks = r.bets.filter(function(b) { return b.matchId === mid; });
+        if (m) html += '<div style="font-size:.73rem;margin:2px 0;">'+m.home+' VS '+m.away+': '+picks.map(function(p) { return '['+(BT[p.betType]?.label||'')+'] '+p.label; }).join(' / ')+'</div>';
+        else html += '<div style="font-size:.73rem;margin:2px 0;color:var(--text2);">'+mid.replace(/^team_/,'').replace(/_/,' VS ')+': '+picks.map(function(p) { return p.label; }).join('/')+'</div>';
+      });
+      html += '</div>';
+    });
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = '<div style="color:var(--text2);font-size:.75rem;">⚠️ 未能识别出投注内容</div>';
+  }
+}
 function showTextImport() {
   const text = prompt('请粘贴投注文本（格式示例：\n阿根廷 VS 法国 胜\n巴西 VS 葡萄牙 胜\n3串1）');
   if (text && text.trim()) processImportedText(text, '文本');
-}
-function switchOcrView(mode) {
-  document.getElementById('ocrRawView').style.display = mode === 'raw' ? '' : 'none';
-  document.getElementById('ocrParsedView').style.display = mode === 'parsed' ? '' : 'none';
-  document.getElementById('ocrViewRawBtn').style.borderColor = mode === 'raw' ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('ocrViewParsedBtn').style.borderColor = mode === 'parsed' ? 'var(--accent)' : 'var(--border)';
-  if (mode === 'parsed') {
-    const raw = document.getElementById('ocrRawText').value;
-    const records = parseOcrText(raw);
-    const el = document.getElementById('ocrParsedView');
-    if (records.length) {
-      let html = '';
-      records.forEach((r, i) => {
-        const mids = [...new Set(r.bets.map(b=>b.matchId))];
-        html += `<div style="margin-bottom:6px;padding:4px 6px;background:var(--surface2);border-radius:4px;">
-          <div style="font-weight:600;font-size:.76rem;">记录 ${i+1}: ${r.passType} · ${mids.length} 场</div>`;
-        mids.forEach(mid => {
-          const m = getMatch(mid);
-          const picks = r.bets.filter(b => b.matchId === mid);
-          if (m) html += `<div style="font-size:.73rem;margin:2px 0;">${m.home} VS ${m.away}: ${picks.map(p=>'['+BT[p.betType]?.label+'] '+p.label).join(' / ')}</div>`;
-          else html += `<div style="font-size:.73rem;margin:2px 0;color:var(--text2);">${mid.replace(/^team_/,'').replace(/_/,' VS ')}: ${picks.map(p=>'['+BT[p.betType]?.label+'] '+p.label).join(' / ')}</div>`;
-        });
-        html += '</div>';
-      });
-      el.innerHTML = html;
-    } else {
-      el.innerHTML = '<div style="color:var(--text2);font-size:.75rem;">⚠️ 未能识别出投注内容</div>';
-    }
-  }
 }
 function processImportedText(text, source) {
   showToast(`⏳ 正在解析${source}...`, 0);
@@ -1753,7 +1816,7 @@ function renderRecords() {
   var rd = fmtDateKey(bjDate);
   var filtered;
   if (el._showAll) { filtered = savedRecords; el._showAll = false; }
-  else { filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); return !m || fmtDateKey(m.time)===rd; }); }); }
+  else { filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); if (m) return fmtDateKey(m.time)===rd; if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtDateKey(window._csvMatchDates[b.matchId])===rd; return false; }); }); }
   if (!filtered.length) {
     // If there ARE records but none match today, show link to view all
     if (savedRecords.length > 0) {
@@ -1792,7 +1855,12 @@ function renderRecords() {
     let stBadge = '';
     if (recSt === 'correct') stBadge = `<span style="font-size:.65rem;font-weight:600;color:var(--win);padding:1px 6px;border-radius:4px;background:rgba(63,185,80,.12);">✓ 中</span>`;
     else if (recSt === 'wrong') stBadge = `<span style="font-size:.65rem;font-weight:600;color:var(--loss);padding:1px 6px;border-radius:4px;background:rgba(248,81,73,.1);">✗ 未中</span>`;
-    const matchTimes = [...new Set(r.bets.map(b=>{const m=getMatch(b.matchId);return m?fmtTimeCompact(m.time):null;}).filter(Boolean))].join(', ');
+    const matchTimes = [...new Set(r.bets.map(b=>{
+      var m=getMatch(b.matchId);
+      if (m) return fmtTimeCompact(m.time);
+      if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtTimeCompact(window._csvMatchDates[b.matchId]);
+      return null;
+    }).filter(Boolean))].join(', ');
     let detailHtml = '';
     if (isExpanded) {
       const bg = new Map();
