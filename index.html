@@ -932,10 +932,11 @@ function importData(event) {
         });
         clearSelectedMatch();
         document.getElementById('tabRecords')._showAll = true;
-        renderAll();
-        // Clear csvMatchDates after use
         window._csvMatchDates = null;
-        showToast('✅ CSV 数据已导入', 2000);
+        renderAll();
+        // Refresh data from API to sync match IDs
+        fetchData(currentDate);
+        showToast('✅ CSV 数据已导入，正在刷新数据...', 2000);
       } else {
         showToast('⚠️ 不支持的文件格式，请使用 .csv 或 .json', 3000);
       }
