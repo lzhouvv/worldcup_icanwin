@@ -1750,9 +1750,20 @@ function renderRecords() {
   // Use schedule's currentDate with Beijing offset for filtering
   const bjDate = new Date(currentDate);
   bjDate.setHours(bjDate.getHours() + 12);
-  const rd = fmtDateKey(bjDate);
-  const filtered = savedRecords.filter(r => r.bets.some(b => { const m=getMatch(b.matchId); return m && fmtDateKey(m.time)===rd; }));
-  if (!filtered.length) { el.innerHTML=`<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无投注记录</div></div>`; return; }
+  var rd = fmtDateKey(bjDate);
+  var filtered;
+  if (el._showAll) { filtered = savedRecords; el._showAll = false; }
+  else { filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); return !m || fmtDateKey(m.time)===rd; }); }); }
+  if (!filtered.length) {
+    // If there ARE records but none match today, show link to view all
+    if (savedRecords.length > 0) {
+      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无匹配的投注记录</div>
+      <button class="btn btn-sm" onclick="showAllRecords()" style="margin-top:6px;color:var(--accent);">📋 显示全部记录</button></div>`;
+    } else {
+      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>暂无投注记录</div></div>`;
+    }
+    return;
+  }
   let html = '';
   // Group by group field
   const groups = new Map();
@@ -1913,6 +1924,11 @@ function toggleRecordsDate() {
 function switchGroup(name) {
   const el = document.getElementById('tabRecords');
   el._selectedGroup = name;
+  renderRecords();
+}
+function showAllRecords() {
+  const el = document.getElementById('tabRecords');
+  el._showAll = true;
   renderRecords();
 }
 function fmtDateKey(d) {
