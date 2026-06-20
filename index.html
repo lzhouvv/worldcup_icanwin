@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>竞彩分析 · 世界杯</title>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-<script>window._TesseractFallback = false; if (typeof Tesseract === 'undefined') { document.write('<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"><\\/script>'); }</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -386,16 +384,17 @@
           <table class="match-table" id="matchTable">
             <thead>
               <tr>
-                <th style="width:48px;">时间</th>
-                <th>组别</th>
+                <th style="width:44px;padding-right:32px;">时间</th>
+                <th style="width:36px;padding-right:32px;">组别</th>
                 <th>主队</th>
+                <th style="width:20px;text-align:center;padding-left:32px;padding-right:32px;font-size:0;">VS</th>
+                <th style="padding-right:32px;">客队</th>
+                <th style="width:44px;text-align:center;padding-right:32px;">比分</th>
+                <th style="width:40px;text-align:center;">半场</th>
                 <th style="width:20px;text-align:center;"></th>
-                <th>客队</th>
-                <th style="width:60px;text-align:center;">比分</th>
-                <th style="width:20px;text-align:center;"></th>
-                <th style="width:44px;text-align:center;" class="odds-th">胜</th>
-                <th style="width:44px;text-align:center;" class="odds-th">平</th>
-                <th style="width:44px;text-align:center;" class="odds-th">负</th>
+                <th style="width:42px;text-align:center;" class="odds-th">胜</th>
+                <th style="width:42px;text-align:center;" class="odds-th">平</th>
+                <th style="width:42px;text-align:center;" class="odds-th">负</th>
               </tr>
             </thead>
             <tbody id="matchBody"></tbody>
@@ -480,10 +479,10 @@
           <button class="tab-item active" onclick="switchTab('records',this)">投注记录</button>
           <button class="tab-item" onclick="switchTab('analysis',this)">命中率</button>
         </div>
-        </div>
         <div id="tabRecords" class="tab-content show" style="padding-bottom:16px;"></div>
         <div id="tabAnalysis" class="tab-content"></div>
       </div>
+    </div>
     </div>
 
   </div>
@@ -659,16 +658,20 @@ const BT = {
     desc:(p)=>PICK_LABEL[p]||p, hit:(p,r)=>p===r },
   rqspf:{ id:'rqspf',label:'让球胜平负',
     getOpts:(m,hc)=>{const s=hc>0?'+':'';return[{p:'3',l:`${s}${hc}胜`},{p:'1',l:`${s}${hc}平`},{p:'0',l:`${s}${hc}负`}].map(o=>({...o,odds:null}));},
-    desc:(p,hc)=>`${hc>0?'+':''}${hc}${PICK_LABEL[p]}`, hit:(p,r,m,hc)=>{const sh=parseInt(m.homeScore),sa=parseInt(m.awayScore);if(isNaN(sh)||isNaN(sa))return false;const adj=(sh+hc)>sa?'3':(sh+hc)<sa?'0':'1';return adj===p;} },
+    desc:(p,hc)=>`${hc>0?'+':''}${hc}${PICK_LABEL[p]}`, hit:(p,r,m,hc)=>{const sh=parseInt(m.homeScore),sa=parseInt(m.awayScore);if(isNaN(sh)||isNaN(sa))return false;const h=Number(hc)||0;const adj=(sh+h)>sa?'3':(sh+h)<sa?'0':'1';return adj===p;} },
   zjq:{ id:'zjq',label:'总进球',
     getOpts:()=>[{p:'0',l:'0球'},{p:'1',l:'1球'},{p:'2',l:'2球'},{p:'3',l:'3球'},{p:'4',l:'4球'},{p:'5',l:'5球'},{p:'6',l:'6球'},{p:'7p',l:'7+球'}].map(o=>({...o,odds:null})),
     desc:(p)=>({'0':'0球','1':'1球','2':'2球','3':'3球','4':'4球','5':'5球','6':'6球','7p':'7+球'}[p]||p), hit:(p,r,m)=>{const t=parseInt(m.homeScore)+parseInt(m.awayScore);if(isNaN(t))return false;return p==='7p'?t>=7:t===parseInt(p);} },
   bqc:{ id:'bqc',label:'半全场',
     getOpts:()=>[{p:'33',l:'胜-胜'},{p:'31',l:'胜-平'},{p:'30',l:'胜-负'},{p:'13',l:'平-胜'},{p:'11',l:'平-平'},{p:'10',l:'平-负'},{p:'03',l:'负-胜'},{p:'01',l:'负-平'},{p:'00',l:'负-负'}].map(o=>({...o,odds:null})),
-    desc:(p)=>({'33':'胜-胜','31':'胜-平','30':'胜-负','13':'平-胜','11':'平-平','10':'平-负','03':'负-胜','01':'负-平','00':'负-负'}[p]||p), hit:(p,r,m)=>{
-      // Need HT result + FT result. FT is r. HT we try from match.htResult
-      if (!m.htResult || !r) return false;
-      return p === m.htResult + r;
+    desc:(p)=>({'33':'胜-胜','31':'胜-平','30':'胜-负','13':'平-胜','11':'平-平','10':'平-负','03':'负-胜','01':'负-平','00':'负-负'}[p]||p), hit:(p,r,m,hc)=>{
+      // Compute HT and FT results from actual scores (more reliable)
+      var sh=parseInt(m.homeScore), sa=parseInt(m.awayScore);
+      var ftR = (!isNaN(sh)&&!isNaN(sa)) ? (sh>sa?'3':(sh<sa?'0':'1')) : r;
+      var htR = null;
+      if (m.htScoreStr) { var pp=m.htScoreStr.split('-'), hh=parseInt(pp[0]), ha=parseInt(pp[1]); htR = (!isNaN(hh)&&!isNaN(ha)) ? (hh>ha?'3':(hh<ha?'0':'1')) : m.htResult; }
+      else htR = m.htResult;
+      return htR && ftR ? p === htR + ftR : false;
     } },
   bf:{ id:'bf',label:'比分',
     getOpts:()=>{const s=['1-0','2-0','2-1','3-0','3-1','3-2','4-0','4-1','4-2','5-0','5-1','5-2','other-3','0-0','1-1','2-2','3-3','draw-other','0-1','0-2','1-2','0-3','1-3','2-3','0-4','1-4','2-4','0-5','1-5','2-5','other-0'];const lb={'other-3':'胜其他','draw-other':'平其他','other-0':'负其他'};return s.map(p=>({p,l:lb[p]||p.replace('-',':'),odds:null}));},
@@ -751,6 +754,9 @@ async function fetchData(date) {
   document.getElementById('matchBody').innerHTML='';
   document.getElementById('matchEmpty').style.display='block';
   document.getElementById('matchEmptyMsg').innerHTML = `⚠️ 无法获取数据<br><button class="btn btn-sm" onclick="useFallbackData()" style="margin-top:6px;color:var(--accent);">📋 使用示例数据</button>`;
+  // Show all records when fetch fails
+  var recEl = document.getElementById('tabRecords');
+  if (recEl) { recEl._showAll = true; renderRecords(); }
 }
 
 // Fallback data when network unavailable
@@ -870,7 +876,7 @@ function importData(event) {
         if (conflicts.length && !confirm(`发现 ${conflicts.length} 处冲突，确定覆盖？\n取消则跳过冲突项`)) {
           showToast('已取消', 1500); event.target.value = ''; return;
         }
-        if (data.matches) matches = data.matches;
+        // Don't restore matches from import - use live API data instead
         if (data.manualScores) { Object.assign(_manualScores, data.manualScores); saveManualScores(); }
         if (data.savedRecords) {
           data.savedRecords.forEach(r => { if (!savedRecords.some(x => x.id === r.id)) savedRecords.push(r); });
@@ -1094,11 +1100,8 @@ function renderMatches() {
     let scHtml;
     if (fin) {
       const ft = `${m.homeScore}:${m.awayScore}`;
-      if (m.htScoreStr) {
-        scHtml = `<span class="score-main">${ft}</span><span class="score-ht">半场 ${m.htScoreStr}</span>`;
-      } else {
-        scHtml = `<span class="score-main">${ft}</span><span class="score-ht">全场</span>`;
-      }
+      const ht = m.htScoreStr ? `<span class="score-ht">半场 ${m.htScoreStr}</span>` : '';
+      scHtml = `<span class="score-main">${ft}</span>${ht}`;
     } else if (liv && m.isHT) {
       scHtml = `<span class="score-main" style="color:var(--draw);font-weight:700;">${m.homeScore}:${m.awayScore}</span><span class="score-ht" style="color:var(--draw);font-weight:600;">⚪ 半场</span>`;
     } else if (liv) {
@@ -1116,12 +1119,13 @@ function renderMatches() {
     const hf=m.homeLogo?`<img class="flag" src="${m.homeLogo}">`:'', af=m.awayLogo?`<img class="flag" src="${m.awayLogo}">`:'';
 
     return `<tr class="${fin?'finished':(liv?'live':'upcoming')} ${sel?'selected':''} ${hasBet?'highlight':''}" data-match="${m.id}">
-      <td class="time-col">${fmtT(m.time)}</td>
-      <td><span style="font-size:.7rem;color:var(--text2);">${m.group}</span></td>
+      <td class="time-col" style="padding-right:32px;">${fmtShortT(m.time)}</td>
+      <td style="padding-right:32px;"><span style="font-size:.7rem;color:var(--text2);">${m.group}</span></td>
       <td><span class="team-name">${hf}${m.home}</span></td>
-      <td style="text-align:center;"><span class="vs">VS</span></td>
-      <td><span class="team-name">${af}${m.away}</span></td>
-      <td style="text-align:center;">${scHtml}</td>
+      <td style="text-align:center;padding-left:32px;padding-right:32px;"><span class="vs">VS</span></td>
+      <td style="padding-right:32px;"><span class="team-name">${af}${m.away}</span></td>
+      <td style="text-align:center;padding-right:32px;"><span class="score-main">${m.homeScore}:${m.awayScore}</span></td>
+      <td style="text-align:center;">${_manualScores[m.id] ? `<span style="font-size:.7rem;color:var(--accent);">${_manualScores[m.id].htH}-${_manualScores[m.id].htA}</span>` : (m.htScoreStr ? `<span style="font-size:.7rem;color:var(--text2);">${m.htScoreStr}</span>` : '<span style="font-size:.65rem;color:var(--text2);">—</span>')}</td>
       <td style="text-align:center;vertical-align:middle;">${fin||liv?`<span class="btn btn-sm" onclick="event.stopPropagation();openScoreDialog('${m.id}')" title="手动设置比分" style="padding:0 4px;font-size:.6rem;cursor:pointer;color:${_manualScores[m.id]?'var(--accent)':'var(--text2)'};">${_manualScores[m.id]?'📝✓':'📝'}</span>`:'<span style="color:var(--text2);font-size:.6rem;">—</span>'}</td>
       <td class="odds-cell odds-th">${o3}</td>
       <td class="odds-cell odds-th">${o1}</td>
@@ -1132,6 +1136,7 @@ function renderMatches() {
   if(!showOdds) document.querySelectorAll('.odds-th,.odds-cell').forEach(el=>el.style.display='none');
 }
 function fmtT(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('month')}/${g('day')} ${g('hour')}:${g('minute')}`; }
+function fmtShortT(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('hour')}:${g('minute')}`; }
 function getMatch(id) { return matches.find(m=>m.id===id); }
 function fmtTimeCompact(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit'}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('month')}/${g('day')}`; }
 
@@ -1194,7 +1199,7 @@ function renderBetOptions() {
     hcHtml=`<div class="hc-bar">${HCP_OPTS.map(h=>`<button class="hc-btn ${selectedHandicap===h?'active':''}" onclick="selectHandicap(${h})">${h>0?'+':''}${h}</button>`).join('')}</div>`;
   }
   const opts=bt.getOpts(m, selectedBetType==='rqspf'?selectedHandicap:undefined);
-  const existingPicks=new Set(bets.filter(b=>b.matchId===m.id&&b.betType===selectedBetType&&b.handicap===(selectedBetType==='rqspf'?selectedHandicap:undefined)).map(b=>b.pick));
+  const existingPicks=new Set(bets.filter(b=>b.matchId===m.id&&b.betType===selectedBetType&&Number(b.handicap)===Number(selectedBetType==='rqspf'?selectedHandicap:undefined)).map(b=>b.pick));
   container.innerHTML=`${hcHtml}<div class="bet-options show">
     <div style="font-size:.7rem;color:var(--text2);margin-bottom:3px;">${bt.label}（可多选）</div>
     <div class="bet-opt-grid">
@@ -1208,7 +1213,7 @@ function selectHandicap(h) { selectedHandicap=h; renderBetOptions(); }
 function toggleBetOption(matchId, betType, pick) {
   const m=getMatch(matchId); if(!m) return;
   const hc=betType==='rqspf'?selectedHandicap:undefined;
-  const idx=bets.findIndex(b=>b.matchId===matchId&&b.betType===betType&&b.pick===pick&&b.handicap===hc);
+  const idx=bets.findIndex(b=>b.matchId===matchId&&b.betType===betType&&b.pick===pick&&Number(b.handicap)===Number(hc));
   if (idx>=0) { bets.splice(idx,1); }
   else {
     const bt=BT[betType];
@@ -1354,7 +1359,15 @@ function getEffScores(mid) {
     const ftR = s.ftH > s.ftA ? '3' : (s.ftH < s.ftA ? '0' : '1');
     return { htResult: htR, result: ftR, htScoreStr: `${s.htH}-${s.htA}`, homeScore: String(s.ftH), awayScore: String(s.ftA), _manual: true, htH: s.htH, htA: s.htA };
   }
-  return { htResult: m.htResult, result: m.result, htScoreStr: m.htScoreStr, homeScore: m.homeScore, awayScore: m.awayScore, _manual: false, htH: m.htScoreStr ? parseInt(m.htScoreStr.split('-')[0]) : null, htA: m.htScoreStr ? parseInt(m.htScoreStr.split('-')[1]) : null };
+  // Compute result from scores when available (override API if incorrect)
+  var sh = parseInt(m.homeScore), sa = parseInt(m.awayScore);
+  var computedResult = (!isNaN(sh) && !isNaN(sa)) ? (sh > sa ? '3' : (sh < sa ? '0' : '1')) : m.result;
+  var computedHtResult = m.htScoreStr ? (function() {
+    var parts = m.htScoreStr.split('-');
+    var hh = parseInt(parts[0]), ha = parseInt(parts[1]);
+    return (!isNaN(hh) && !isNaN(ha)) ? (hh > ha ? '3' : (hh < ha ? '0' : '1')) : m.htResult;
+  })() : m.htResult;
+  return { htResult: computedHtResult, result: computedResult, htScoreStr: m.htScoreStr, homeScore: m.homeScore, awayScore: m.awayScore, _manual: false, htH: m.htScoreStr ? parseInt(m.htScoreStr.split('-')[0]) : null, htA: m.htScoreStr ? parseInt(m.htScoreStr.split('-')[1]) : null };
 }
 
 // OCR image recognition + text import for bet slips
@@ -1660,7 +1673,7 @@ function calculateHitRate() {
       const eff = getEffScores(b.matchId);
       const bt = BT[b.betType];
       let status = 'pending';
-      const isResolved = eff._manual || m.status === 'finished';
+      const isResolved = eff._manual || (m.status === 'finished' && (b.betType !== 'bqc' || m.htScoreStr || m.htResult));
       if (isResolved) {
         if (eff.result === null) status = 'pending';
         else status = bt.hit(b.pick, eff.result, { ...m, ...eff }, b.handicap) ? 'correct' : 'wrong';
@@ -1812,18 +1825,21 @@ function renderRecords() {
     return;
   }
   // Use schedule's currentDate with Beijing offset for filtering
-  const bjDate = new Date(currentDate);
+  var bjDate = new Date(currentDate);
   bjDate.setHours(bjDate.getHours() + 12);
   var rd = fmtDateKey(bjDate);
-  var filtered;
-  if (el._showAll) { filtered = savedRecords; el._showAll = false; }
-  else { filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); if (m) return fmtDateKey(m.time)===rd; if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtDateKey(window._csvMatchDates[b.matchId])===rd; return false; }); }); }
+  var filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); if (m) return fmtDateKey(m.time)===rd; if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtDateKey(window._csvMatchDates[b.matchId])===rd; return false; }); });
   if (!filtered.length) {
-    // If there ARE records but none match today, show link to view all
-    if (savedRecords.length > 0) {
-      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无匹配的投注记录</div>
-      <button class="btn btn-sm" onclick="showAllRecords()" style="margin-top:6px;color:var(--accent);">📋 显示全部记录</button></div>`;
-    } else {
+    // If records exist but none match AND matches data doesn't cover this date, show all
+    if (savedRecords.length > 0 && matches.length > 0) {
+      var anyMatchForDate = matches.some(function(m) { return fmtDateKey(m.time) === rd; });
+      if (!anyMatchForDate) {
+        filtered = savedRecords; // Show all when no date data available
+      } else {
+      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无投注记录</div>
+      <div style="font-size:.72rem;color:var(--text2);margin-top:4px;">切换顶部赛程日期查看其他日期的记录</div></div>`;
+      }
+    } else if (savedRecords.length > 0) {
       el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>暂无投注记录</div></div>`;
     }
     return;
@@ -1879,7 +1895,7 @@ function renderRecords() {
           betTypes.forEach(btId => {
           if (!eff) return;
           if (btId === 'rqspf') {
-            const hc = picks.find(b=>b.betType==='rqspf')?.handicap ?? 0;
+            const hc = Number(picks.find(b=>b.betType==='rqspf')?.handicap) || 0;
             const ftH = parseInt(eff.homeScore), ftA = parseInt(eff.awayScore);
             if (!isNaN(ftH) && !isNaN(ftA)) {
               const adjH = ftH + hc, adjA = ftA;
@@ -1953,10 +1969,9 @@ function calcRecordHitStatus(record) {
   if (record.passType !== 'single' && record.passType !== 'mixed') { const n=parseInt(record.passType); if(!isNaN(n)) need=n; }
   // 单关: 只要有任意一场命中就算中
   if (record.passType === 'single') {
-    if (resolved === 0) return null; // no matches resolved yet
-    const hasCorrect = (dead < resolved);
-    if (hasCorrect && resolved === total) return 'correct';
-    if (dead === resolved) return 'wrong';
+    if (resolved === 0) return null;
+    if (dead < resolved) return 'correct'; // 至少一场命中
+    if (dead === resolved && resolved === total) return 'wrong'; // 全部结束且无一命中
     return null;
   }
   if (resolved === 0) return null;
@@ -2000,6 +2015,16 @@ function showAllRecords() {
   el._showAll = true;
   renderRecords();
 }
+function refreshRecords() {
+  var el = document.getElementById('tabRecords');
+  if (el) { el._showAll = false; }
+  renderRecords();
+  showToast('已刷新', 1000);
+}
+function recordsPrevDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()-1); el._recordsDate=fmtDateKey(d); renderRecords(); }
+function recordsPrevDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()-1); el._recordsDate=fmtDateKey(d); renderRecords(); }
+function recordsNextDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()+1); el._recordsDate=fmtDateKey(d); renderRecords(); }
+function recordsSyncDate() { var el=document.getElementById('tabRecords'); el._recordsDate=fmtDateKey(new Date(currentDate.getTime()+12*3600000)); renderRecords(); }
 function fmtDateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
@@ -2069,6 +2094,12 @@ function changeDate(delta) {
   currentDate = new Date(currentDate);
   currentDate.setDate(currentDate.getDate() + delta);
   updateDatePicker();
+  var el = document.getElementById('tabRecords');
+  if (el) {
+    // Show all records immediately while data loads
+    el._showAll = true;
+    renderRecords();
+  }
   fetchData(currentDate);
 }
 function goToToday() {
