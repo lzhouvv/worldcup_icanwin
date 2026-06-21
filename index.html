@@ -278,9 +278,9 @@
     display: flex; justify-content: space-between; align-items: center;
   }
   .record-item.has-detail { padding-bottom: 0; }
-  .record-item .ri-detail-box { margin: 4px 8px 0; padding: 4px 16px 12px; background: var(--surface2); border-radius: 6px; font-size: .74rem; border-bottom: 1px solid var(--border); width: 200px; box-sizing: border-box; }
+  .record-item .ri-detail-box { margin: 4px 8px 0; padding: 4px 16px 12px; background: var(--surface2); border-radius: 6px; font-size: .74rem; border-bottom: 1px solid var(--border); width: 240px; box-sizing: border-box; }
   .record-item:last-child { border-bottom: none; }
-  .record-item .ri-info { flex: 1; min-width: 0; padding-left: 20px; }
+  .record-item .ri-info { flex: 1; min-width: 0; padding-left: 12px; }
   .record-item .ri-info .ri-label { font-weight: 600; font-size: .8rem; }
   .record-item .ri-info .ri-detail { color: var(--text2); font-size: .7rem; margin-top: 1px; }
   .record-item .ri-actions { display: flex; gap: 3px; flex-shrink: 0; }
@@ -367,10 +367,10 @@
         <span>🏆 世界杯赛程</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="display:flex;align-items:center;gap:4px;font-size:.72rem;">
-            <button class="btn btn-sm" onclick="changeDate(-1)" style="padding:2px 7px;">‹</button>
+            <button class="btn btn-sm" onclick="changeDate(-1)" style="padding:2px 5px;">‹</button>
             <span style="font-size:.78rem;font-weight:600;min-width:60px;text-align:center;" id="dateLabel"></span>
-            <button class="btn btn-sm" onclick="changeDate(1)" style="padding:2px 7px;">›</button>
-            <button class="btn btn-sm" onclick="goToToday()" style="padding:2px 7px;font-size:.65rem;">今天</button>
+            <button class="btn btn-sm" onclick="changeDate(1)" style="padding:2px 5px;">›</button>
+            <button class="btn btn-sm" onclick="goToToday()" style="padding:2px 5px;font-size:.6rem;">今天</button>
           </div>
           <span class="badge" id="matchCount">—</span>
           <div class="odds-toggle" id="oddsToggle" onclick="toggleOdds()">
@@ -391,7 +391,7 @@
                 <th style="padding-right:32px;">客队</th>
                 <th style="width:44px;text-align:center;padding-right:32px;">比分</th>
                 <th style="width:40px;text-align:center;">半场</th>
-                <th style="width:20px;text-align:center;"></th>
+                <th style="width:32px;text-align:center;"></th>
                 <th style="width:42px;text-align:center;" class="odds-th">胜</th>
                 <th style="width:42px;text-align:center;" class="odds-th">平</th>
                 <th style="width:42px;text-align:center;" class="odds-th">负</th>
@@ -483,8 +483,6 @@
         <div id="tabAnalysis" class="tab-content"></div>
       </div>
     </div>
-    </div>
-
   </div>
 </div>
 
@@ -634,10 +632,8 @@ function cnName(en) {
 // =====================================================================
 //  CONFIG
 // =====================================================================
-const API_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
-const EVENT_API = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/events';
-const POLL_INTERVAL = 60_000;
 const STORAGE_KEY = 'odds_analyzer_records';
+const TRASH_KEY = 'odds_trash_records';
 
 // =====================================================================
 //  竞彩玩法
@@ -697,96 +693,161 @@ let savedRecords = [];
 let trashRecords = [];
 // Default to yesterday (US time vs China)
 // Default date: today (US time for API)
-let currentDate = new Date();
-currentDate.setHours(currentDate.getHours() - 12); // Beijing → US
+let currentDate = new Date(); // Today Beijing time
 try { const d = localStorage.getItem(STORAGE_KEY); if (d) savedRecords = JSON.parse(d); } catch(e) {}
 try { const d = localStorage.getItem(TRASH_KEY); if (d) trashRecords = JSON.parse(d); } catch(e) {}
 
 // =====================================================================
-//  FETCH + HT SCORE extraction
+//  BUILT-IN SCHEDULE DATA
 // =====================================================================
-async function fetchData(date) {
-  const badge = document.getElementById('statusBadge');
-  badge.className = 'status-badge loading';
+const WC_MATCHES = [
+  {d:"2026-06-11",t:"13:00 UTC-6",h:"Mexico",a:"South Africa",g:"A",hs:2,as:0,ht:[1,0]},
+  {d:"2026-06-11",t:"20:00 UTC-6",h:"South Korea",a:"Czech Republic",g:"A",hs:2,as:1,ht:[0,0]},
+  {d:"2026-06-12",t:"15:00 UTC-4",h:"Canada",a:"Bosnia & Herzegovina",g:"B",hs:1,as:1,ht:[0,1]},
+  {d:"2026-06-12",t:"18:00 UTC-7",h:"USA",a:"Paraguay",g:"D",hs:4,as:1,ht:[3,0]},
+  {d:"2026-06-13",t:"12:00 UTC-7",h:"Qatar",a:"Switzerland",g:"B",hs:1,as:1,ht:[0,1]},
+  {d:"2026-06-13",t:"18:00 UTC-4",h:"Brazil",a:"Morocco",g:"C",hs:1,as:1,ht:[1,1]},
+  {d:"2026-06-13",t:"21:00 UTC-4",h:"Haiti",a:"Scotland",g:"C",hs:0,as:1,ht:[0,1]},
+  {d:"2026-06-13",t:"21:00 UTC-7",h:"Australia",a:"Turkey",g:"D",hs:2,as:0,ht:[1,0]},
+  {d:"2026-06-14",t:"12:00 UTC-5",h:"Germany",a:"Curacao",g:"E",hs:7,as:1,ht:[3,1]},
+  {d:"2026-06-14",t:"15:00 UTC-5",h:"Netherlands",a:"Japan",g:"F",hs:2,as:2,ht:[0,0]},
+  {d:"2026-06-14",t:"19:00 UTC-4",h:"Ivory Coast",a:"Ecuador",g:"E",hs:1,as:0,ht:[0,0]},
+  {d:"2026-06-14",t:"20:00 UTC-6",h:"Sweden",a:"Tunisia",g:"F",hs:5,as:1,ht:[2,1]},
+  {d:"2026-06-15",t:"12:00 UTC-7",h:"Belgium",a:"Egypt",g:"G",hs:1,as:1,ht:[0,1]},
+  {d:"2026-06-15",t:"12:00 UTC-4",h:"Spain",a:"Cape Verde",g:"H",hs:0,as:0,ht:[0,0]},
+  {d:"2026-06-15",t:"18:00 UTC-7",h:"Iran",a:"New Zealand",g:"G",hs:2,as:2,ht:[1,1]},
+  {d:"2026-06-15",t:"18:00 UTC-4",h:"Saudi Arabia",a:"Uruguay",g:"H",hs:1,as:1,ht:[1,0]},
+  {d:"2026-06-16",t:"15:00 UTC-4",h:"France",a:"Senegal",g:"I",hs:3,as:1,ht:[0,0]},
+  {d:"2026-06-16",t:"18:00 UTC-4",h:"Iraq",a:"Norway",g:"I",hs:1,as:4,ht:[1,2]},
+  {d:"2026-06-16",t:"20:00 UTC-5",h:"Argentina",a:"Algeria",g:"J",hs:3,as:0,ht:[1,0]},
+  {d:"2026-06-16",t:"21:00 UTC-7",h:"Austria",a:"Jordan",g:"J",hs:3,as:1,ht:[1,0]},
+  {d:"2026-06-17",t:"12:00 UTC-5",h:"Portugal",a:"DR Congo",g:"K",hs:1,as:1,ht:[1,1]},
+  {d:"2026-06-17",t:"15:00 UTC-5",h:"England",a:"Croatia",g:"L",hs:4,as:2,ht:[2,2]},
+  {d:"2026-06-17",t:"19:00 UTC-4",h:"Ghana",a:"Panama",g:"L",hs:1,as:0,ht:[0,0]},
+  {d:"2026-06-17",t:"20:00 UTC-6",h:"Uzbekistan",a:"Colombia",g:"K",hs:1,as:3,ht:[0,1]},
+  {d:"2026-06-18",t:"12:00 UTC-4",h:"Czech Republic",a:"South Africa",g:"A",hs:1,as:1,ht:[1,0]},
+  {d:"2026-06-18",t:"12:00 UTC-7",h:"Switzerland",a:"Bosnia & Herzegovina",g:"B",hs:4,as:1,ht:[0,0]},
+  {d:"2026-06-18",t:"15:00 UTC-7",h:"Canada",a:"Qatar",g:"B",hs:6,as:0,ht:[3,0]},
+  {d:"2026-06-18",t:"19:00 UTC-6",h:"Mexico",a:"South Korea",g:"A",hs:1,as:0,ht:[0,0]},
+  {d:"2026-06-19",t:"12:00 UTC-7",h:"USA",a:"Australia",g:"D",hs:2,as:0,ht:[2,0]},
+  {d:"2026-06-19",t:"18:00 UTC-4",h:"Scotland",a:"Morocco",g:"C",hs:0,as:1,ht:[0,1]},
+  {d:"2026-06-19",t:"20:30 UTC-4",h:"Brazil",a:"Haiti",g:"C",hs:3,as:0,ht:[3,0]},
+  {d:"2026-06-19",t:"20:00 UTC-7",h:"Turkey",a:"Paraguay",g:"D",hs:0,as:1,ht:[0,1]},
+  {d:"2026-06-20",t:"16:00 UTC-4",h:"Germany",a:"Ivory Coast",g:"E",hs:2,as:1,ht:[1,0]},
+  {d:"2026-06-20",t:"12:00 UTC-5",h:"Netherlands",a:"Sweden",g:"F",hs:1,as:1,ht:[0,1]},
+  {d:"2026-06-20",t:"19:00 UTC-5",h:"Ecuador",a:"Curacao",g:"E",hs:3,as:0,ht:[1,0]},
+  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:1,ht:[0,0]},
+  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G"},
+  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H"},
+  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G"},
+  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H"},
+  {d:"2026-06-22",t:"17:00 UTC-4",h:"France",a:"Iraq",g:"I"},
+  {d:"2026-06-22",t:"20:00 UTC-4",h:"Norway",a:"Senegal",g:"I"},
+  {d:"2026-06-22",t:"12:00 UTC-5",h:"Argentina",a:"Austria",g:"J"},
+  {d:"2026-06-22",t:"20:00 UTC-7",h:"Jordan",a:"Algeria",g:"J"},
+  {d:"2026-06-23",t:"12:00 UTC-5",h:"Portugal",a:"Uzbekistan",g:"K"},
+  {d:"2026-06-23",t:"16:00 UTC-4",h:"England",a:"Ghana",g:"L"},
+  {d:"2026-06-23",t:"19:00 UTC-4",h:"Panama",a:"Croatia",g:"L"},
+  {d:"2026-06-23",t:"20:00 UTC-6",h:"Colombia",a:"DR Congo",g:"K"},
+  {d:"2026-06-24",t:"19:00 UTC-6",h:"Czech Republic",a:"Mexico",g:"A"},
+  {d:"2026-06-24",t:"19:00 UTC-6",h:"South Africa",a:"South Korea",g:"A"},
+  {d:"2026-06-24",t:"12:00 UTC-7",h:"Switzerland",a:"Canada",g:"B"},
+  {d:"2026-06-24",t:"12:00 UTC-7",h:"Bosnia & Herzegovina",a:"Qatar",g:"B"},
+  {d:"2026-06-24",t:"18:00 UTC-4",h:"Scotland",a:"Brazil",g:"C"},
+  {d:"2026-06-24",t:"18:00 UTC-4",h:"Morocco",a:"Haiti",g:"C"},
+  {d:"2026-06-25",t:"19:00 UTC-7",h:"Turkey",a:"USA",g:"D"},
+  {d:"2026-06-25",t:"19:00 UTC-7",h:"Paraguay",a:"Australia",g:"D"},
+  {d:"2026-06-25",t:"16:00 UTC-4",h:"Curacao",a:"Ivory Coast",g:"E"},
+  {d:"2026-06-25",t:"16:00 UTC-4",h:"Ecuador",a:"Germany",g:"E"},
+  {d:"2026-06-25",t:"18:00 UTC-5",h:"Japan",a:"Sweden",g:"F"},
+  {d:"2026-06-25",t:"18:00 UTC-5",h:"Tunisia",a:"Netherlands",g:"F"},
+  {d:"2026-06-26",t:"20:00 UTC-7",h:"Egypt",a:"Iran",g:"G"},
+  {d:"2026-06-26",t:"20:00 UTC-7",h:"New Zealand",a:"Belgium",g:"G"},
+  {d:"2026-06-26",t:"19:00 UTC-5",h:"Cape Verde",a:"Saudi Arabia",g:"H"},
+  {d:"2026-06-26",t:"18:00 UTC-6",h:"Uruguay",a:"Spain",g:"H"},
+  {d:"2026-06-26",t:"15:00 UTC-4",h:"Norway",a:"France",g:"I"},
+  {d:"2026-06-26",t:"15:00 UTC-4",h:"Senegal",a:"Iraq",g:"I"},
+  {d:"2026-06-27",t:"21:00 UTC-5",h:"Algeria",a:"Austria",g:"J"},
+  {d:"2026-06-27",t:"21:00 UTC-5",h:"Jordan",a:"Argentina",g:"J"},
+  {d:"2026-06-27",t:"19:30 UTC-4",h:"Colombia",a:"Portugal",g:"K"},
+  {d:"2026-06-27",t:"19:30 UTC-4",h:"DR Congo",a:"Uzbekistan",g:"K"},
+  {d:"2026-06-27",t:"17:00 UTC-4",h:"Panama",a:"England",g:"L"},
+  {d:"2026-06-27",t:"17:00 UTC-4",h:"Croatia",a:"Ghana",g:"L"},
+];
 
-  // Build URL
-  const targetDate = date || currentDate;
-  const dateStr = targetDate.getFullYear().toString() +
-    String(targetDate.getMonth()+1).padStart(2,'0') +
-    String(targetDate.getDate()).padStart(2,'0');
-  const API = `${API_BASE}?dates=${dateStr}`;
-  let lastErr;
-
-  const proxies = [
-    null,
-    'https://api.allorigins.win/raw?url=',
-    'https://api.allorigins.win/get?url=',
-    'https://corsproxy.io/?url=',
-    'https://corsproxy.io/?',
-    'https://thingproxy.freeboard.io/fetch/',
-  ];
-  for (const proxy of proxies) {
-    try {
-      const fullUrl = proxy ? proxy + encodeURIComponent(API) : API;
-      const r = await fetch(fullUrl, { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) throw Error(`HTTP ${r.status}`);
-      const text = await r.text();
-      if (!text || text.length < 50) throw Error('响应过短');
-      let data;
-      try { data = JSON.parse(text); }
-      catch(e) {
-        const w = JSON.parse(text);
-        if (w?.contents) data = typeof w.contents === 'string' ? JSON.parse(w.contents) : w.contents;
-        else if (w?.data) data = w.data;
-        else throw Error('JSON格式错误');
-      }
-      if (data && data.events && data.events.length > 0) {
-        console.log(`✅ ${proxy||'直连'}: ${data.events.length} 场`);
-        processScoreboard(data);
-        return;
-      }
-      if (data && data.events) throw Error('当天无赛事');
-      throw Error('无效响应');
-    } catch(e) { lastErr = e; console.warn(`❌ ${proxy||'直连'}: ${e.message}`); }
+function parseTimeToBJ(d, t) {
+  // Parse local venue time to Beijing time
+  var tm = t ? t.match(/(\d+):(\d+)\s*UTC([+-]\d+)/i) : null;
+  if (tm) {
+    var dd = new Date(d + 'T00:00:00Z');
+    dd.setUTCHours(parseInt(tm[1]) - parseInt(tm[3]), parseInt(tm[2]), 0, 0);
+    return dd;
   }
-  badge.className='status-badge error';
-  document.getElementById('matchCount').textContent='错误';
-  document.getElementById('matchBody').innerHTML='';
-  document.getElementById('matchEmpty').style.display='block';
-  document.getElementById('matchEmptyMsg').innerHTML = `⚠️ 无法获取数据<br><button class="btn btn-sm" onclick="useFallbackData()" style="margin-top:6px;color:var(--accent);">📋 使用示例数据</button>`;
-  // Show all records when fetch fails
-  var recEl = document.getElementById('tabRecords');
-  if (recEl) { recEl._showAll = true; renderRecords(); }
+  // No timezone info: treat as Beijing time directly
+  var dd = new Date(d + 'T00:00:00Z');
+  dd.setUTCHours(12, 0, 0, 0);
+  return dd;
 }
-
-// Fallback data when network unavailable
-function useFallbackData() {
-  const demo = [
-    ['阿根廷','法国',1,0],['巴西','葡萄牙',2,1],['英格兰','荷兰',0,0],['西班牙','德国',1,2],
-    ['意大利','克罗地亚',3,1],['比利时','摩洛哥',2,2],['乌拉圭','韩国',0,1],['日本','瑞士',1,1],
-  ];
-  const now = Date.now();
-  matches = demo.map((t,i) => {
-    const d = new Date(now + i*86400000*2 - 2*86400000); d.setHours(18+(i%4)*2,0,0,0);
-    const fin = i >= 4; const [home,away,hg,ag]=t;
+function loadScheduleData() {
+  matches = WC_MATCHES.map(function(m, i) {
+    try {
+    var time = parseTimeToBJ(m.d, m.t), fin = m.hs !== undefined && m.as !== undefined;
+    var htStr = m.ht ? m.ht[0]+'-'+m.ht[1] : null;
+    var localT = '';
+    if (m.t) { var tm = m.t.match(/(\d+):(\d+)/); if (tm) localT = tm[1]+':'+tm[2]; }
     return {
-      id:'ex'+i, group:['A组','A组','B组','B组','C组','C组','D组','D组'][i], displayDate:d,
-      home, away, homeEn:home, awayEn:away, homeAbbr:home.slice(0,3), awayAbbr:away.slice(0,3),
-      homeLogo:'', awayLogo:'', time:d, displayDate:d,
-      status:fin?'finished':(i===2?'live':'upcoming'),
-      isHT:i===2, displayClock:i===2?'HT':'',
-      homeScore:String(hg), awayScore:String(ag),
-      odds:{3:+(2+Math.random()*3).toFixed(2),1:+(2.5+Math.random()*1.5).toFixed(2),0:+(2+Math.random()*3).toFixed(2)},
-      result:fin?(hg>ag?'3':(hg<ag?'0':'1')):null, htResult:null, htScoreStr:null, _htConfirmed:false,
+      id:'m'+i, group:m.g+'组', home:cnName(m.h), away:cnName(m.a),
+      homeEn:m.h, awayEn:m.a, homeAbbr:'', awayAbbr:'', homeLogo:'', awayLogo:'',
+      time:time, displayDate:new Date(m.d + 'T12:00:00Z'), displayTime: localT || '12:00', odds:{3:null,1:null,0:null},
+      status:fin?'finished':'upcoming',
+      homeScore:fin?String(m.hs):'0', awayScore:fin?String(m.as):'0',
+      result:fin?(m.hs>m.as?'3':(m.hs<m.as?'0':'1')):null,
+      htResult:m.ht?(m.ht[0]>m.ht[1]?'3':(m.ht[0]<m.ht[1]?'0':'1')):null,
+      htScoreStr:htStr, _htConfirmed:!!htStr,
     };
-  });
-  const badge=document.getElementById('statusBadge');
-  badge.className='status-badge';
-  if (selectedMatchId&&!matches.find(m=>m.id===selectedMatchId)) clearSelectedMatch();
-  renderAll(); showToast('📋 已加载示例数据（非实时）', 3000);
+    } catch(e) { return null; }
+  }).filter(Boolean);
+  renderAll();
 }
-
-// Export / Import data
+function processScoreboard(data) {
+  var raw = data.events || [], processed = [];
+  raw.forEach(function(ev) {
+    var c = ev.competitions?.[0] || {}, s = c.status || {}, st = s.type?.state || 'pre';
+    var fin = st === 'post', liv = st === 'in';
+    var cs = c.competitors || [], h = cs.find(function(x) { return x.homeAway === 'home'; }), a = cs.find(function(x) { return x.homeAway === 'away'; });
+    var hs = h?.score ?? '-', as_ = a?.score ?? '-';
+    var he = h?.team?.displayName || h?.team?.name || '?', ae = a?.team?.displayName || a?.team?.name || '?';
+    processed.push({
+      id: ev.id, group: c.altGameNote ? (c.altGameNote.match(/Group\s+([A-Z])/i)?.[1]+'组') : '',
+      home: cnName(he), away: cnName(ae), homeEn: he, awayEn: ae, homeAbbr: h?.team?.abbreviation||'', awayAbbr: a?.team?.abbreviation||'',
+      homeLogo: h?.team?.logo||'', awayLogo: a?.team?.logo||'',
+      time: new Date(ev.date), displayDate: new Date(ev.date), odds: {3:null,1:null,0:null},
+      status: fin ? 'finished' : (liv ? 'live' : 'upcoming'),
+      homeScore: hs, awayScore: as_,
+      result: (fin && hs !== '-' && as_ !== '-') ? (parseInt(hs) > parseInt(as_) ? '3' : (parseInt(hs) < parseInt(as_) ? '0' : '1')) : null,
+      htResult: null, htScoreStr: null, _htConfirmed: false,
+    });
+  });
+  if (processed.length) { matches = processed; renderAll(); }
+}
+async function fetchData(date) {
+  loadScheduleData();
+  var badge = document.getElementById('statusBadge');
+  var targetDate = date || currentDate;
+  var ds = targetDate.getFullYear().toString() + String(targetDate.getMonth()+1).padStart(2,'0') + String(targetDate.getDate()).padStart(2,'0');
+  var proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?url='];
+  for (var pi = 0; pi < proxies.length; pi++) {
+    try {
+      var r = await fetch(proxies[pi] + encodeURIComponent('https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=' + ds), { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) continue;
+      var text = await r.text(); if (!text || text.length < 50) continue;
+      var data;
+      try { data = JSON.parse(text); } catch(ee) { try { var w = JSON.parse(text); if (w?.contents) data = JSON.parse(w.contents); else continue; } catch(ee2) { continue; } }
+      if (data && data.events && data.events.length > 0) { processScoreboard(data); if (badge) badge.className = 'status-badge'; return; }
+    } catch(e) {}
+  }
+  if (badge) badge.className = 'status-badge';
+}
 function exportData() {
   try {
     // Generate CSV data (Excel-compatible, no library needed)
@@ -799,7 +860,7 @@ function exportData() {
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
       csv += esc(m.id) + ',' + esc(m.group) + ',' + esc(m.home) + ',' + esc(m.away) + ',' + esc(m.homeEn||'') + ',' + esc(m.awayEn||'') + ',';
-      csv += esc(m.time ? fmtT(m.time) : '') + ',' + esc(m.status) + ',' + esc(m.homeScore) + ',' + esc(m.awayScore) + ',';
+      csv += esc(m.displayDate ? fmtT(m.displayDate) : (m.time ? fmtT(m.time) : '')) + ',' + esc(m.status) + ',' + esc(m.homeScore) + ',' + esc(m.awayScore) + ',';
       csv += esc(m.htScoreStr ? m.htScoreStr.split('-')[0] : '') + ',' + esc(m.htScoreStr ? m.htScoreStr.split('-')[1] : '') + ',' + esc(m.result||'') + ',' + esc(m.htResult||'') + '\n';
     }
     // Sheet 2: Manual scores
@@ -891,10 +952,12 @@ function importData(event) {
       } else if (isCSV) {
         // CSV import
         var text = e.target.result;
-        // Remove BOM character
-        text = text.replace(/^\uFEFF/, '');
+        if (!text || typeof text !== 'string' || text.length < 10) throw Error('文件为空或格式错误');
+        text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+        // Split into sections. First section starts with === without preceding \n
         var sections = text.split('\n===');
-        sections.forEach(section => {
+        if (!sections[0].startsWith('===')) sections[0] = '===' + sections[0];
+        sections.forEach(function(section) {
           const lines = section.trim().split('\n');
           if (lines.length < 2) return;
           const header = lines[0].trim().replace(/^===\s*|\s*===$/g, '');
@@ -937,12 +1000,9 @@ function importData(event) {
           }
         });
         clearSelectedMatch();
-        document.getElementById('tabRecords')._showAll = true;
-        window._csvMatchDates = null;
+        document.getElementById('tabRecords')._showAll = false;
         renderAll();
-        // Refresh data from API to sync match IDs
-        fetchData(currentDate);
-        showToast('✅ CSV 数据已导入，正在刷新数据...', 2000);
+        showToast('✅ CSV 数据已导入', 2000);
       } else {
         showToast('⚠️ 不支持的文件格式，请使用 .csv 或 .json', 3000);
       }
@@ -954,146 +1014,16 @@ function importData(event) {
   event.target.value = '';
 }
 
-function processScoreboard(data) {
-  const badge = document.getElementById('statusBadge');
-
-  const raw = data.events;
-  const processed = [];
-
-  for (const ev of raw) {
-    const c=ev.competitions?.[0]||{}, s=c.status||{}, st=s.type?.state||'pre';
-    const fin=st==='post', liv=st==='in';
-    const cs=c.competitors||[], h=cs.find(x=>x.homeAway==='home'), a=cs.find(x=>x.homeAway==='away');
-    const hs=h?.score??'-', as_=a?.score??'-';
-    const he=h?.team?.displayName||h?.team?.name||'?', ae=a?.team?.displayName||a?.team?.name||'?';
-    const oo=c.odds?.[0]?.moneyline||null;
-    let od={3:null,1:null,0:null};
-    if (oo) { od[3]=amD(oo.home?.current?.odds); od[1]=amD(oo.draw?.current?.odds); od[0]=amD(oo.away?.current?.odds); }
-
-    const statusName = s.type?.name || '';
-    const isHT = statusName === 'STATUS_HALFTIME';
-    const displayClock = s.displayClock || '';
-
-    let result = null;
-    if (fin) { const sh=parseInt(hs),sa=parseInt(as_); if(!isNaN(sh)&&!isNaN(sa)) result=sh>sa?'3':(sh<sa?'0':'1'); }
-
-    let htResult = null, htScoreStr = null, _htConfirmed = false;
-
-    // Source A: linescores period-by-period (most reliable)
-    if (h?.linescores?.length && a?.linescores?.length) {
-      const hL = h.linescores.map(l => parseInt(l.value)).filter(v => !isNaN(v));
-      const aL = a.linescores.map(l => parseInt(l.value)).filter(v => !isNaN(v));
-      if (hL.length > 0 && aL.length > 0) {
-        htScoreStr = `${hL[0]}-${aL[0]}`;
-        htResult = hL[0] > aL[0] ? '3' : (hL[0] < aL[0] ? '0' : '1');
-        _htConfirmed = true;
-      }
-    }
-
-    // Source B: parse play-by-play Goal events from competition details
-    if (!_htConfirmed && c.details && Array.isArray(c.details) && c.details.length) {
-      const info = extractHTfromDetails(c.details);
-      if (info) { htResult=info.result; htScoreStr=info.scoreStr; _htConfirmed=true; }
-    }
-
-    // Source C: match is currently AT half-time → current score = HT score
-    if (!_htConfirmed && isHT) {
-      const sh=parseInt(hs), sa=parseInt(as_);
-      if (!isNaN(sh)&&!isNaN(sa)) { htResult=sh>sa?'3':(sh<sa?'0':'1'); htScoreStr=`${hs}-${as_}`; _htConfirmed=true; }
-    }
-
-    // Source D: finished 0-0 must also be 0-0 at HT
-    if (!_htConfirmed && fin && hs==='0' && as_==='0') { htResult='1'; htScoreStr='0-0'; _htConfirmed=true; }
-
-    // Background fetch: for all finished matches still missing HT
-    if (!_htConfirmed && fin) lazyFetchHT(ev.id);
-
-    const gn=c.altGameNote||'', gm=gn.match(/Group\s+([A-Z])/), gl=gm?gm[1]+'组':'世界杯';
-
-    processed.push({
-      id:ev.id, group:gl, home:cnName(he), away:cnName(ae),
-      homeEn:he, awayEn:ae,
-      homeAbbr:h?.team?.abbreviation||'', awayAbbr:a?.team?.abbreviation||'',
-      homeLogo:h?.team?.logo||'', awayLogo:a?.team?.logo||'',
-      time:new Date(ev.date),
-      status:fin?'finished':(liv?'live':'upcoming'), isHT, displayClock,
-      homeScore:hs, awayScore:as_,
-      odds:od, result, htResult, htScoreStr, _htConfirmed, displayDate: new Date(ev.date),
-    });
-  }
-
-  matches = processed;
-  badge.className='status-badge';
-  if (selectedMatchId&&!matches.find(m=>m.id===selectedMatchId)) clearSelectedMatch();
-  renderAll();
-  // Recalculate hit rate with fresh data if bets exist and analysis was done
-  if (bets.length && analysisResult) calculateHitRate();
-}
-
-function extractHTfromDetails(details) {
-  // Only reliable when details contains first-half Goal events
-  let lastGoalBeforeHT = null;
-  for (const d of details) {
-    if (d.type?.text === 'Goal' && d.clock?.displayValue && d.score?.value) {
-      const mins = parseInt(d.clock.displayValue.split(':')[0])||0;
-      if (mins <= 45) lastGoalBeforeHT = d.score.value;
-    }
-  }
-  if (lastGoalBeforeHT) {
-    const parts=lastGoalBeforeHT.split('-'), sh=parseInt(parts[0]), sa=parseInt(parts[1]);
-    if (!isNaN(sh)&&!isNaN(sa)) return { result: sh>sa?'3':(sh<sa?'0':'1'), scoreStr: lastGoalBeforeHT };
-  }
-  return null; // Can't determine from details alone
-}
-
-function amD(s) { if(!s)return null; const v=parseInt(s); return isNaN(v)?null:(v>0?+(v/100+1).toFixed(2):+(100/Math.abs(v)+1).toFixed(2)); }
-
-// Background HT fetch — get event details with full play-by-play
-const _htCache = {};
-async function lazyFetchHT(eventId) {
-  if (_htCache[eventId] !== undefined) return _htCache[eventId];
-  _htCache[eventId] = null;
-  for (const p of ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?']) {
-    try {
-      const r = await fetch(p+encodeURIComponent(`${EVENT_API}/${eventId}`), { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) throw Error();
-      const text = await r.text();
-      let data;
-      try { data = JSON.parse(text); } catch(e) { const w=JSON.parse(text); data=JSON.parse(w.contents); }
-      // Try to find half-time score from event details
-      let info = null;
-      const comp = data?.competitions?.[0];
-      if (comp?.details) info = extractHTfromDetails(comp.details);
-      if (!info && data?.header?.competitions?.[0]?.details) info = extractHTfromDetails(data.header.competitions[0].details);
-      if (!info) {
-        // Check linescores as last resort
-        const cs = comp?.competitors || [];
-        const h2=cs.find(x=>x.homeAway==='home'), a2=cs.find(x=>x.homeAway==='away');
-        if (h2?.linescores?.length && a2?.linescores?.length) {
-          const sH=parseInt(h2.linescores[0].value), sA=parseInt(a2.linescores[0].value);
-          if (!isNaN(sH)&&!isNaN(sA)) info={result:sH>sA?'3':(sH<sA?'0':'1'), scoreStr:`${sH}-${sA}`};
-        }
-      }
-      _htCache[eventId] = info||null;
-      if (info) { const m=matches.find(x=>x.id===eventId); if(m){m.htResult=info.result;m.htScoreStr=info.scoreStr;m._htConfirmed=true;renderMatches();if(bets.length&&analysisResult)calculateHitRate();} }
-      return info;
-    } catch(e) { /* try next proxy */ }
-  }
-  _htCache[eventId] = null;
-  return null;
-}
-
-// =====================================================================
-//  RENDER
-// =====================================================================
-function renderAll() { renderMatches(); renderBetSlip(); renderMatchListCompact(); if(selectedMatchId)renderSelectedMatch(); if(analysisResult)renderAnalysis(); renderRecords(); }
+function renderAll() { try { renderMatches(); renderBetSlip(); renderMatchListCompact(); if(selectedMatchId)renderSelectedMatch(); if(analysisResult)renderAnalysis(); } catch(e) { console.warn('Render error:', e); } renderRecords(); }
 
 function renderMatches() {
-  document.getElementById('matchCount').textContent=matches.length+' 场';
+  const rd = fmtDateKey(currentDate);
+  var dayMatches = matches.filter(function(m) { return fmtDateKey(m.displayDate||m.time) === rd; });
+  document.getElementById('matchCount').textContent=dayMatches.length+' 场';
   const tb=document.getElementById('matchBody'), em=document.getElementById('matchEmpty');
-  if(!matches.length){tb.innerHTML='';em.style.display='block';document.getElementById('matchEmptyMsg').textContent='暂无数据';return;}
+  if(!dayMatches.length){tb.innerHTML='';em.style.display='block';document.getElementById('matchEmptyMsg').textContent='该日无赛事';return;}
   em.style.display='none';
-  tb.innerHTML=matches.map(m=>{
+  tb.innerHTML=dayMatches.map(m=>{
     const hasBet=bets.some(b=>b.matchId===m.id), sel=selectedMatchId===m.id, fin=m.status==='finished', liv=m.status==='live';
 
     // Score display — show HT + FT clearly
@@ -1119,13 +1049,13 @@ function renderMatches() {
     const hf=m.homeLogo?`<img class="flag" src="${m.homeLogo}">`:'', af=m.awayLogo?`<img class="flag" src="${m.awayLogo}">`:'';
 
     return `<tr class="${fin?'finished':(liv?'live':'upcoming')} ${sel?'selected':''} ${hasBet?'highlight':''}" data-match="${m.id}">
-      <td class="time-col" style="padding-right:32px;">${fmtShortT(m.time)}</td>
+      <td class="time-col" style="padding-right:32px;">${m.displayTime||fmtShortT(m.displayDate||m.time)} <span class="btn btn-sm" onclick="event.stopPropagation();editMatchTime('${m.id}')" title="调整时间" style="padding:0 2px;font-size:.5rem;cursor:pointer;color:var(--text2);">⏱</span></td>
       <td style="padding-right:32px;"><span style="font-size:.7rem;color:var(--text2);">${m.group}</span></td>
       <td><span class="team-name">${hf}${m.home}</span></td>
       <td style="text-align:center;padding-left:32px;padding-right:32px;"><span class="vs">VS</span></td>
       <td style="padding-right:32px;"><span class="team-name">${af}${m.away}</span></td>
-      <td style="text-align:center;padding-right:32px;"><span class="score-main">${m.homeScore}:${m.awayScore}</span></td>
-      <td style="text-align:center;">${_manualScores[m.id] ? `<span style="font-size:.7rem;color:var(--accent);">${_manualScores[m.id].htH}-${_manualScores[m.id].htA}</span>` : (m.htScoreStr ? `<span style="font-size:.7rem;color:var(--text2);">${m.htScoreStr}</span>` : '<span style="font-size:.65rem;color:var(--text2);">—</span>')}</td>
+      <td style="text-align:center;padding-right:32px;"><span class="score-main">${_manualScores[m.id] ? (_manualScores[m.id].ftH+':'+_manualScores[m.id].ftA) : (fin||liv ? m.homeScore+':'+m.awayScore : '—')}</span></td>
+      <td style="text-align:center;">${_manualScores[m.id] ? `<span style="font-size:.7rem;color:var(--accent);">${_manualScores[m.id].htH||0}-${_manualScores[m.id].htA||0}</span>` : (m.htScoreStr ? `<span style="font-size:.7rem;color:var(--text2);">${m.htScoreStr}</span>` : '<span style="font-size:.65rem;color:var(--text2);">—</span>')}</td>
       <td style="text-align:center;vertical-align:middle;">${fin||liv?`<span class="btn btn-sm" onclick="event.stopPropagation();openScoreDialog('${m.id}')" title="手动设置比分" style="padding:0 4px;font-size:.6rem;cursor:pointer;color:${_manualScores[m.id]?'var(--accent)':'var(--text2)'};">${_manualScores[m.id]?'📝✓':'📝'}</span>`:'<span style="color:var(--text2);font-size:.6rem;">—</span>'}</td>
       <td class="odds-cell odds-th">${o3}</td>
       <td class="odds-cell odds-th">${o1}</td>
@@ -1135,10 +1065,10 @@ function renderMatches() {
   tb.querySelectorAll('tr[data-match]').forEach(tr=>{tr.addEventListener('click',function(){selectMatch(this.dataset.match);});});
   if(!showOdds) document.querySelectorAll('.odds-th,.odds-cell').forEach(el=>el.style.display='none');
 }
-function fmtT(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('month')}/${g('day')} ${g('hour')}:${g('minute')}`; }
-function fmtShortT(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('hour')}:${g('minute')}`; }
+function fmtT(d) { var f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}); var p=f.formatToParts(d); var g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; var h=g('hour'), mi=g('minute'); if(h==='12'&&mi==='00'){return g('month')+'/'+g('day')+' 24:00';} return `${g('month')}/${g('day')} ${h}:${mi}`; }
+function fmtShortT(d) { var f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}); var p=f.formatToParts(d); var g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; var h=g('hour'), mi=g('minute'); if(h==='12'&&mi==='00'){return '24:00';} return `${h}:${mi}`; }
 function getMatch(id) { return matches.find(m=>m.id===id); }
-function fmtTimeCompact(d) { const f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit'}); const p=f.formatToParts(d); const g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; return `${g('month')}/${g('day')}`; }
+function fmtTimeCompact(d) { var f=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}); var p=f.formatToParts(d); var g=t=>p.find(x=>x.type===t)?.value.padStart(2,'0')||'00'; var h=parseInt(g('hour')), mi=parseInt(g('minute')); if(h===12&&mi===0){var dd=new Date(d);dd.setUTCHours(dd.getUTCHours()-12);dd.setUTCMinutes(dd.getUTCMinutes()-1);var p2=new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit'}).formatToParts(dd);var g2=t=>p2.find(x=>x.type===t)?.value.padStart(2,'0')||'00';return g2('month')+'/'+g2('day');} return g('month')+'/'+g('day'); }
 
 function renderMatchListCompact() {
   const el = document.getElementById('matchListCompact');
@@ -1151,7 +1081,7 @@ function renderMatchListCompact() {
     const betDot = bets.some(b => b.matchId === m.id) ? '<span class="ml-betdot"></span>' : '';
     const finClass = fin ? 'ml-finished' : '';
     return `<div class="ml-item ${sel} ${hasBet} ${finClass}" data-match="${m.id}">
-      <span class="ml-time">${fmtTimeCompact(m.time)}</span>
+      <span class="ml-time">${fmtTimeCompact(m.displayDate||m.time)}</span>
       <span class="ml-teams">
         <span class="ml-team" style="color:var(--text2);">${m.home}</span>
         <span class="ml-vs">VS</span>
@@ -1327,6 +1257,26 @@ function openScoreDialog(mid) {
   setTimeout(() => document.getElementById('sdFtH').focus(), 100);
 }
 function closeScoreDialog() { document.getElementById('scoreDialog').classList.remove('show'); }
+function editMatchTime(mid) {
+  var m = getMatch(mid);
+  if (!m) return;
+  var curTime = fmtT(m.displayDate || m.time);
+  var newTime = prompt('调整比赛时间（北京时间 HH:MM）：\n当前时间：' + curTime);
+  if (!newTime) return;
+  var parts = newTime.trim().split(':');
+  if (parts.length !== 2) { showToast('格式错误，请使用 HH:MM', 2000); return; }
+  var h = parseInt(parts[0]), min = parseInt(parts[1]);
+  if (isNaN(h) || isNaN(min) || h < 0 || h > 23 || min < 0 || min > 59) { showToast('时间无效', 2000); return; }
+  // Update both displayDate and time
+  var d = m.displayDate ? new Date(m.displayDate) : new Date(m.time);
+  d.setHours(h, min, 0, 0);
+  m.displayDate = d;
+  if (m.time) m.time = new Date(d);
+  // Re-sort matches by displayDate
+  matches.sort(function(a,b) { return (a.displayDate||a.time) - (b.displayDate||b.time); });
+  renderAll();
+  showToast('时间已更新 ' + fmtT(d), 1500);
+}
 function confirmScoreDialog() {
   const mid = _scoreDialogMatchId;
   const htH = parseInt(document.getElementById('sdHtH').value);
@@ -1578,7 +1528,7 @@ function processImportedText(text, source) {
     showToast('⚠️ 未能识别出投注记录，请检查格式: 球队名 + 胜/平/负', 4000);
   }
 }
-function closeImportDialog() { document.getElementById('importDialog').classList.remove('show'); window._pendingImport = null; }
+function closeImportDialog() { document.getElementById('importDialog').classList.remove('show'); window._pendingImport = null; document.getElementById('importConfirmBtn').style.display = ''; var title = document.querySelector('#importDialog h3'); if (title) title.textContent = '📋 确认导入'; }
 function confirmImport() {
   const data = window._pendingImport;
   if (!data) return;
@@ -1825,45 +1775,46 @@ function renderRecords() {
     return;
   }
   // Use schedule's currentDate with Beijing offset for filtering
-  var bjDate = new Date(currentDate);
-  bjDate.setHours(bjDate.getHours() + 12);
-  var rd = fmtDateKey(bjDate);
-  var filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) { var m=getMatch(b.matchId); if (m) return fmtDateKey(m.time)===rd; if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtDateKey(window._csvMatchDates[b.matchId])===rd; return false; }); });
-  if (!filtered.length) {
-    // If records exist but none match AND matches data doesn't cover this date, show all
-    if (savedRecords.length > 0 && matches.length > 0) {
-      var anyMatchForDate = matches.some(function(m) { return fmtDateKey(m.time) === rd; });
-      if (!anyMatchForDate) {
-        filtered = savedRecords; // Show all when no date data available
-      } else {
-      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无投注记录</div>
-      <div style="font-size:.72rem;color:var(--text2);margin-top:4px;">切换顶部赛程日期查看其他日期的记录</div></div>`;
+  // Use records-specific date or currentDate for filtering
+  var rd = fmtDateKey(currentDate);
+  var filtered;
+  if (el._showAll) { filtered = savedRecords; el._showAll = false; }
+  else {
+    filtered = savedRecords.filter(function(r) { return r.bets.some(function(b) {
+      var m = getMatch(b.matchId);
+      if (m) return fmtDateKey(m.displayDate||m.time)===rd;
+      // Fallback: match by team names in matchId (e.g., 'team_捷克_南非')
+      if (b.matchId && b.matchId.indexOf('team_')===0) {
+        var parts = b.matchId.split('_');
+        if (parts.length >= 3) {
+          var homeName = parts[1], awayName = parts.slice(2).join('_');
+          var found = matches.find(function(mx) { return cnName(mx.homeEn).indexOf(homeName)>=0 || mx.home.indexOf(homeName)>=0; });
+          if (found) return fmtDateKey(found.displayDate||found.time)===rd;
+        }
       }
-    } else if (savedRecords.length > 0) {
-      el.innerHTML = `<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>暂无投注记录</div></div>`;
-    }
+      if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtDateKey(window._csvMatchDates[b.matchId])===rd;
+      return false;
+    }); });
+  }
+  if (!filtered.length && savedRecords.length > 0 && el._showAll) filtered = savedRecords;
+  if (el._showAll) el._showAll = false;
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无投注记录</div></div>';
     return;
   }
   let html = '';
   // Group by group field
   const groups = new Map();
-  filtered.forEach(r => { const g = r.group || '我的'; if(!groups.has(g)) groups.set(g,[]); groups.get(g).push(r); });
-  // Select group tab
-  if (!el._selectedGroup || !groups.has(el._selectedGroup)) el._selectedGroup = '我的';
-  // Group tabs
-  const groupNames = [...groups.keys()];
-  html += '<div style="display:flex;gap:4px;padding:0 0 6px 16px;flex-wrap:wrap;align-items:center;">';
-  groupNames.forEach(g => {
-    const active = el._selectedGroup === g;
-    html += `<button class="btn btn-sm" onclick="switchGroup('${g}')" style="font-size:.7rem;${active?'border-color:var(--accent);color:var(--accent);':''}">📁 ${g} (${groups.get(g).length})</button>`;
+  // Show all records with group as clickable 备注 tag
+  // Sort by group/remark, same groups together
+  filtered.sort(function(a,b) {
+    var ga = a.group || '';
+    var gb = b.group || '';
+    if (ga < gb) return -1;
+    if (ga > gb) return 1;
+    return 0;
   });
-  // Edit group name button for active group
-  const activeGroup = el._selectedGroup;
-  html += `<span class="btn btn-sm" onclick="event.stopPropagation();renameGroup('${activeGroup}')" title="重命名分组" style="padding:0 4px;font-size:.58rem;cursor:pointer;color:var(--text2);margin-left:2px;">✏️</span>`;
-  html += '</div>';
-  // Show only selected group's records
-  const currentRecs = groups.get(el._selectedGroup) || [];
-  currentRecs.forEach(r => {
+  filtered.forEach(r => {
     const mIds = [...new Set(r.bets.map(b=>b.matchId))];
     const sk = rd+'_'+r.id;
     if (!el._singleExpanded) el._singleExpanded = {};
@@ -1874,7 +1825,7 @@ function renderRecords() {
     else if (recSt === 'wrong') stBadge = `<span style="font-size:.65rem;font-weight:600;color:var(--loss);padding:1px 6px;border-radius:4px;background:rgba(248,81,73,.1);">✗ 未中</span>`;
     const matchTimes = [...new Set(r.bets.map(b=>{
       var m=getMatch(b.matchId);
-      if (m) return fmtTimeCompact(m.time);
+      if (m) return fmtTimeCompact(m.displayDate||m.time);
       if (window._csvMatchDates && window._csvMatchDates[b.matchId]) return fmtTimeCompact(window._csvMatchDates[b.matchId]);
       return null;
     }).filter(Boolean))].join(', ');
@@ -1886,7 +1837,6 @@ function renderRecords() {
       bg.forEach((picks, mid) => {
         const m = getMatch(mid);
         const ml = m ? `${m.home} VS ${m.away}` : mid;
-        const ss = m && m.status === 'finished' ? ` ${m.homeScore}:${m.awayScore}` : '';
         // Build context info (only for finished/live matches)
         const betTypes = [...new Set(picks.map(b=>b.betType))];
         const eff = m ? getEffScores(m.id) : null;
@@ -1894,7 +1844,10 @@ function renderRecords() {
         if (m && m.status !== 'upcoming' && eff) {
           betTypes.forEach(btId => {
           if (!eff) return;
-          if (btId === 'rqspf') {
+          if (btId === 'spf') {
+            var sh = parseInt(eff.homeScore), sa = parseInt(eff.awayScore);
+            if (!isNaN(sh) && !isNaN(sa)) ctxHtml += (sh > sa ? '胜' : (sh < sa ? '负' : '平')) + ' ';
+          } else if (btId === 'rqspf') {
             const hc = Number(picks.find(b=>b.betType==='rqspf')?.handicap) || 0;
             const ftH = parseInt(eff.homeScore), ftA = parseInt(eff.awayScore);
             if (!isNaN(ftH) && !isNaN(ftA)) {
@@ -1902,25 +1855,28 @@ function renderRecords() {
               ctxHtml += (adjH > adjA ? '胜' : (adjH < adjA ? '负' : '平')) + ' ';
             }
           } else if (btId === 'zjq') {
-            const total = (parseInt(eff.homeScore)||0) + (parseInt(eff.awayScore)||0);
-            ctxHtml += `${total}球 `;
+            var t = (parseInt(eff.homeScore)||0) + (parseInt(eff.awayScore)||0);
+            ctxHtml += `${t}球 `;
           } else if (btId === 'bqc') {
-            // Show user's predictions (up to 3) instead of actual result
-            const bqcPicks = picks.filter(b => b.betType === 'bqc');
-            if (bqcPicks.length > 0) {
-              const labels = bqcPicks.map(p => p.label).filter(Boolean);
-              ctxHtml += labels.slice(0, 3).join('/') + ' ';
-            } else {
-              const htLabel = eff.htResult ? ({'3':'胜','1':'平','0':'负'}[eff.htResult]||'?') : '?';
-              const ftLabel = eff.result ? ({'3':'胜','1':'平','0':'负'}[eff.result]||'?') : '?';
-              ctxHtml += `${htLabel}-${ftLabel} `;
+            var htLabel = '?', ftLabel = '?';
+            var sh = parseInt(eff.homeScore), sa = parseInt(eff.awayScore);
+            if (!isNaN(sh) && !isNaN(sa)) ftLabel = sh > sa ? '胜' : (sh < sa ? '负' : '平');
+            if (eff.htH !== null && eff.htA !== null) {
+              var hth = parseInt(eff.htH), hta = parseInt(eff.htA);
+              if (!isNaN(hth) && !isNaN(hta)) htLabel = hth > hta ? '胜' : (hth < hta ? '负' : '平');
+            } else if (eff.htScoreStr) {
+              var pp = eff.htScoreStr.split('-'), hth = parseInt(pp[0]), hta = parseInt(pp[1]);
+              if (!isNaN(hth) && !isNaN(hta)) htLabel = hth > hta ? '胜' : (hth < hta ? '负' : '平');
             }
+            ctxHtml += `${htLabel}-${ftLabel} `;
+          } else if (btId === 'bf') {
+            ctxHtml += `${eff.homeScore}:${eff.awayScore} `;
           }
         });
         }
         detailHtml += `<div style="margin-top:12px;margin-bottom:2px;font-weight:600;font-size:.76rem;display:flex;justify-content:space-between;align-items:center;">
           <span>${ml}</span>
-          <span style="color:var(--text2);font-weight:400;font-size:.7rem;text-align:right;flex-shrink:0;display:flex;align-items:center;gap:8px;"><span>${ss}</span>${ctxHtml?`<span>${ctxHtml.trim()}</span>`:''}</span>
+          <span style="color:var(--text2);font-weight:400;font-size:.7rem;text-align:right;flex-shrink:0;display:flex;align-items:center;gap:8px;">${ctxHtml?`<span>${ctxHtml.trim()}</span>`:''}</span>
         </div>`;
         picks.forEach(b => {
           const bt = BT[b.betType];
@@ -1937,9 +1893,8 @@ function renderRecords() {
       detailHtml += `</div>`;
     }
     html += `<div class="record-item${isExpanded?' has-detail':''}" style="flex-wrap:wrap;">
-      <div class="ri-info" onclick="toggleRecordDetail(${r.id})" style="cursor:pointer;margin-right:4px;">
-        <div class="ri-label">${r.label} <span style="color:var(--text2);font-size:.65rem;">${isExpanded?'▲':'▼'}</span>
-          <span class="btn btn-sm" onclick="event.stopPropagation();renameRecord(${r.id})" title="重命名" style="padding:0 3px;font-size:.6rem;cursor:pointer;color:var(--text2);">✏️</span>
+      <div class="ri-info" onclick="toggleRecordDetail(${r.id})" style="cursor:pointer;margin-right:8px;">
+        <div class="ri-label">${r.group ? `<span onclick="event.stopPropagation();showGroupRecords('${r.group}')" title="点击查看同备注记录" style="cursor:pointer;display:inline-block;padding:0 6px;border-radius:3px;background:var(--surface2);color:var(--accent);font-size:.76rem;font-weight:600;margin-right:6px;">📋 ${r.group}</span>` : ''}${r.label} <span style="color:var(--text2);font-size:.65rem;">${isExpanded?'▲':'▼'}</span>
         </div>
         <div class="ri-detail">${matchTimes} · ${mIds.length} 场 · ${r.passType}</div>
       </div>
@@ -1950,18 +1905,62 @@ function renderRecords() {
       ${isExpanded ? detailHtml : ''}
     </div>`;
     });
+  // Trash management section
+  if (trashRecords.length > 0) {
+    var trashExpanded = el._trashExpanded;
+    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:.72rem;">';
+    html += '<div style="color:var(--text2);margin-bottom:4px;cursor:pointer;display:flex;align-items:center;gap:4px;" onclick="var e=document.getElementById(\'tabRecords\');e._trashExpanded=!e._trashExpanded;renderRecords();">';
+    html += '<span>'+(trashExpanded?'\u25BC':'\u25B6')+'</span>\uD83D\uDDD1\uFE0F \u56de\u6536\u7AD9 ('+trashRecords.length+' \u6761)</div>';
+    if (trashExpanded) {
+    trashRecords.forEach(function(t) {
+      var mIds = [...new Set(t.bets.map(function(b) { return b.matchId; }))];
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">';
+      html += '<span style="color:var(--text2);font-size:.72rem;">'+t.label+' <span style="font-size:.65rem;">'+mIds.length+'\u573A</span></span>';
+      html += '<div style="display:flex;gap:3px;">';
+      html += '<button class="btn btn-sm" onclick="restoreTrashRecord('+t.id+')" style="font-size:.6rem;">\u21A9 \u6062\u590D</button>';
+      html += '<button class="btn btn-sm" onclick="permanentDeleteTrash('+t.id+')" style="font-size:.6rem;color:var(--loss);">\u2715</button>';
+      html += '</div></div>';
+    });
+    html += '<div style="display:flex;gap:6px;margin-top:4px;"><button class="btn btn-sm" onclick="emptyTrash()" style="font-size:.65rem;color:var(--loss);">\uD83D\uDDD1\uFE0F \u6E05\u7A7A\u56DE\u6536\u7AD9</button></div>';
+    }
+    html += '</div>';
+  }
   el.innerHTML = html;
 }
-
+function restoreTrashRecord(id) { var idx=trashRecords.findIndex(function(r){return r.id===id;}); if(idx>=0){savedRecords.unshift(trashRecords[idx]);trashRecords.splice(idx,1);} try{localStorage.setItem(STORAGE_KEY,JSON.stringify(savedRecords));}catch(e){} try{localStorage.setItem(TRASH_KEY,JSON.stringify(trashRecords));}catch(e){} renderRecords();showToast('已恢复',1200); }
+function showGroupRecords(group) {
+  var recs = savedRecords.filter(function(r) { return r.group === group; });
+  if (!recs.length) { showToast('无记录', 1200); return; }
+  var html = '<div style="font-size:.82rem;max-height:60vh;overflow-y:auto;">';
+  html += '<div style="font-weight:600;margin-bottom:8px;">📋 ' + group + ' (' + recs.length + ' 条)</div>';
+  recs.forEach(function(r) {
+    var mIds = [...new Set(r.bets.map(function(b) { return b.matchId; }))];
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:.76rem;">';
+    html += '<span>' + r.label + '</span>';
+    html += '<span style="color:var(--text2);font-size:.7rem;">' + mIds.length + ' 场 · ' + (r.passType||'单关') + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  document.getElementById('importPreview').innerHTML = html;
+  document.getElementById('importSummary').innerHTML = '';
+  document.getElementById('importConfirmBtn').style.display = 'none';
+  // Change title
+  var title = document.querySelector('#importDialog h3');
+  if (title) title.textContent = '📋 ' + group;
+  document.getElementById('importDialog').classList.add('show');
+}
+function permanentDeleteTrash(id) { trashRecords=trashRecords.filter(function(r){return r.id!==id;}); try{localStorage.setItem(TRASH_KEY,JSON.stringify(trashRecords));}catch(e){} renderRecords();showToast('已永久删除',1200); }
+function emptyTrash() { if(confirm('确定清空回收站？删除的记录无法恢复。')){trashRecords=[];try{localStorage.setItem(TRASH_KEY,JSON.stringify(trashRecords));}catch(e){}renderRecords();showToast('回收站已清空',1500);} }
 function calcRecordHitStatus(record) {
   const byMatch = new Map();
   record.bets.forEach(b => {if(!byMatch.has(b.matchId))byMatch.set(b.matchId,[]);byMatch.get(b.matchId).push(b);});
   const total = byMatch.size; let dead=0, resolved=0;
   byMatch.forEach((picks,mid) => {
     const eff = getEffScores(mid);
-    if (!eff || (!eff._manual && (!getMatch(mid) || getMatch(mid).status !== 'finished' || getMatch(mid).result === null))) return;
+    var m = getMatch(mid) || {};
+    var isFinished = (m.status === 'finished' && eff.result !== null) || eff._manual;
+    if (!eff || !isFinished) return;
     resolved++;
-    const m = getMatch(mid) || {};
     const ok = picks.some(b => { const bt=BT[b.betType]; return bt ? bt.hit(b.pick, eff.result, {...m, ...eff}, b.handicap) : false; });
     if (!ok) dead++;
   });
@@ -1983,31 +1982,22 @@ function calcRecordHitStatus(record) {
 function toggleRecordDetail(id) {
   const el = document.getElementById('tabRecords');
   if (!el._singleExpanded) el._singleExpanded = {};
-  const k = el._recordsDate + '_' + id;
+  var k = rd + '_' + id;
   el._singleExpanded[k] = !el._singleExpanded[k];
   renderRecords();
 }
 
-function recordsChangeDate(delta) {
-  const el = document.getElementById('tabRecords');
-  const d = new Date(el._recordsDate); d.setDate(d.getDate()+delta);
-  el._recordsDate = fmtDateKey(d);
+function refreshRecords() {
+  var el = document.getElementById('tabRecords');
+  if (el) { el._showAll = false; }
   renderRecords();
-}
-function recordsGoToday() {
-  const el = document.getElementById('tabRecords');
-  el._recordsDate = fmtDateKey(new Date());
-  renderRecords();
-}
-function toggleRecordsDate() {
-  const el = document.getElementById('tabRecords');
-  if (!el._expandedByDate) el._expandedByDate = {};
-  el._expandedByDate[el._recordsDate] = !(el._expandedByDate[el._recordsDate] !== false);
-  renderRecords();
+  showToast('已刷新', 1000);
 }
 function switchGroup(name) {
   const el = document.getElementById('tabRecords');
   el._selectedGroup = name;
+  _collapseState._group = name;
+  saveCollapseState();
   renderRecords();
 }
 function showAllRecords() {
@@ -2015,18 +2005,14 @@ function showAllRecords() {
   el._showAll = true;
   renderRecords();
 }
-function refreshRecords() {
-  var el = document.getElementById('tabRecords');
-  if (el) { el._showAll = false; }
-  renderRecords();
-  showToast('已刷新', 1000);
-}
-function recordsPrevDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()-1); el._recordsDate=fmtDateKey(d); renderRecords(); }
-function recordsPrevDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()-1); el._recordsDate=fmtDateKey(d); renderRecords(); }
-function recordsNextDay() { var el=document.getElementById('tabRecords'); var d=new Date(el._recordsDate); d.setDate(d.getDate()+1); el._recordsDate=fmtDateKey(d); renderRecords(); }
-function recordsSyncDate() { var el=document.getElementById('tabRecords'); el._recordsDate=fmtDateKey(new Date(currentDate.getTime()+12*3600000)); renderRecords(); }
 function fmtDateKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  var f = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  var p = f.formatToParts(d);
+  var get = function(t) { return p.find(function(x) { return x.type === t; })?.value || '00'; };
+  var h = parseInt(get('hour')), mi = parseInt(get('minute'));
+  if (h === 12 && mi === 0) { var dd = new Date(d); dd.setUTCHours(dd.getUTCHours()-12); dd.setUTCMinutes(dd.getUTCMinutes()-1); var p2 = new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(dd); var g2=t=>p2.find(x=>x.type===t)?.value||'00'; return g2('year')+'-'+g2('month')+'-'+g2('day'); }
+  if (h === 23 && mi === 59) { var dd2 = new Date(d); dd2.setUTCDate(dd2.getUTCDate()-1); var p3 = new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(dd2); var g3=t=>p3.find(x=>x.type===t)?.value||'00'; return g3('year')+'-'+g3('month')+'-'+g3('day'); }
+  return get('year') + '-' + get('month') + '-' + get('day');
 }
 
 // =====================================================================
@@ -2041,7 +2027,7 @@ function switchTab(tab, btn) {
   if (tab === 'records') {
     renderRecords();
   } else {
-    if (tab === 'analysis' && analysisResult) renderAnalysis();
+    renderAnalysis();
   }
 }
 
@@ -2058,7 +2044,8 @@ function toggleCollapse(name) {
 }
 function applyCollapseState() {
   ['betInput'].forEach(name => {
-    if (_collapseState[name]) {
+    // Default to collapsed if not explicitly expanded
+    if (_collapseState[name] !== false) {
       const body = document.getElementById(name + 'Body');
       const icon = document.getElementById(name + 'Icon');
       if (body) body.style.display = 'none';
@@ -2093,28 +2080,24 @@ function showToast(msg, t) {
 function changeDate(delta) {
   currentDate = new Date(currentDate);
   currentDate.setDate(currentDate.getDate() + delta);
+  _collapseState._date = currentDate.toISOString();
+  saveCollapseState();
   updateDatePicker();
-  var el = document.getElementById('tabRecords');
-  if (el) {
-    // Show all records immediately while data loads
-    el._showAll = true;
-    renderRecords();
-  }
+  renderRecords();
   fetchData(currentDate);
 }
 function goToToday() {
-  // Set to US date corresponding to today Beijing time
   currentDate = new Date();
-  currentDate.setHours(currentDate.getHours() - 12); // Beijing → US
+  _collapseState._date = currentDate.toISOString();
+  saveCollapseState();
   updateDatePicker();
+  renderRecords();
   fetchData(currentDate);
 }
 function updateDatePicker() {
-  // Display Beijing date (US time + 12h)
-  const bj = new Date(currentDate);
-  bj.setHours(bj.getHours() + 12);
-  const m = String(bj.getMonth()+1).padStart(2,'0');
-  const d = String(bj.getDate()).padStart(2,'0');
+  // Display Beijing date
+  const m = String(currentDate.getMonth()+1).padStart(2,'0');
+  const d = String(currentDate.getDate()).padStart(2,'0');
   const el = document.getElementById('dateLabel');
   if (el) el.textContent = `${m}/${d}`;
 }
@@ -2128,11 +2111,13 @@ document.getElementById('oddsToggleLabel').textContent = '隐藏';
 showOdds = false;
 document.getElementById('tabRecords').classList.add('show');
 updateDatePicker();
+loadScheduleData();
+// Restore saved date — only if it has matches
+if (_collapseState._date) { try { var sd = new Date(_collapseState._date); if (!isNaN(sd)) { var sk = fmtDateKey(sd); var hasMatches = matches.some(function(m) { return fmtDateKey(m.displayDate||m.time) === sk; }); if (hasMatches) { currentDate = sd; updateDatePicker(); } } } catch(e) {} }
 renderRecords();
 renderAnalysis();
 applyCollapseState();
 fetchData(currentDate);
-setInterval(() => fetchData(currentDate), POLL_INTERVAL);
 </script>
 </body>
 </html>
