@@ -574,7 +574,7 @@ const TEAM_CN = {
   'Senegal':'塞内加尔','Poland':'波兰','Mexico':'墨西哥','Australia':'澳大利亚',
   'Saudi Arabia':'沙特','Ghana':'加纳','Cameroon':'喀麦隆','Serbia':'塞尔维亚',
   'Costa Rica':'哥斯达黎加','Iran':'伊朗','Ecuador':'厄瓜多尔','Wales':'威尔士',
-  'Tunisia':'突尼斯','Qatar':'卡塔尔','France':'法国','Czechia':'捷克',
+  'Tunisia':'突尼斯','Qatar':'卡塔尔','France':'法国','Czech Republic':'捷克','Czechia':'捷克',
   'South Africa':'南非','Algeria':'阿尔及利亚','Nigeria':'尼日利亚','Mali':'马里',
   'Ivory Coast':'科特迪瓦','Egypt':'埃及','DR Congo':'刚果(金)','Zambia':'赞比亚',
   'Tanzania':'坦桑尼亚','Sudan':'苏丹','Burkina Faso':'布基纳法索','Comoros':'科摩罗',
@@ -736,11 +736,11 @@ const WC_MATCHES = [
   {d:"2026-06-20",t:"16:00 UTC-4",h:"Germany",a:"Ivory Coast",g:"E",hs:2,as:1,ht:[1,0]},
   {d:"2026-06-20",t:"12:00 UTC-5",h:"Netherlands",a:"Sweden",g:"F",hs:1,as:1,ht:[0,1]},
   {d:"2026-06-20",t:"19:00 UTC-5",h:"Ecuador",a:"Curacao",g:"E",hs:3,as:0,ht:[1,0]},
-  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:1,ht:[0,0]},
-  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G"},
-  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H"},
-  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G"},
-  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H"},
+  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:4,ht:[0,0]},
+  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G",hs:2,as:2},
+  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H",hs:4,as:0},
+  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G",hs:1,as:3},
+  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H",hs:2,as:2},
   {d:"2026-06-22",t:"17:00 UTC-4",h:"France",a:"Iraq",g:"I"},
   {d:"2026-06-22",t:"20:00 UTC-4",h:"Norway",a:"Senegal",g:"I"},
   {d:"2026-06-22",t:"12:00 UTC-5",h:"Argentina",a:"Austria",g:"J"},
@@ -835,7 +835,7 @@ async function fetchData(date) {
   var badge = document.getElementById('statusBadge');
   var targetDate = date || currentDate;
   var ds = targetDate.getFullYear().toString() + String(targetDate.getMonth()+1).padStart(2,'0') + String(targetDate.getDate()).padStart(2,'0');
-  var proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?url='];
+  var proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?url=', 'https://api.allorigins.win/get?url=', 'https://thingproxy.freeboard.io/fetch/', 'https://corsproxy.io/?'];
   for (var pi = 0; pi < proxies.length; pi++) {
     try {
       var r = await fetch(proxies[pi] + encodeURIComponent('https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=' + ds), { signal: AbortSignal.timeout(5000) });
@@ -2112,8 +2112,8 @@ showOdds = false;
 document.getElementById('tabRecords').classList.add('show');
 updateDatePicker();
 loadScheduleData();
-// Restore saved date — only if it has matches
-if (_collapseState._date) { try { var sd = new Date(_collapseState._date); if (!isNaN(sd)) { var sk = fmtDateKey(sd); var hasMatches = matches.some(function(m) { return fmtDateKey(m.displayDate||m.time) === sk; }); if (hasMatches) { currentDate = sd; updateDatePicker(); } } } catch(e) {} }
+// Restore saved date if it differs from today
+if (_collapseState._date) { try { var sd = new Date(_collapseState._date); if (!isNaN(sd)) { var todayKey = fmtDateKey(new Date()); var savedKey = fmtDateKey(sd); if (savedKey !== todayKey) { var hasMatches = matches.some(function(m) { return fmtDateKey(m.displayDate||m.time) === savedKey; }); if (hasMatches) { currentDate = sd; updateDatePicker(); } } } } catch(e) {} }
 renderRecords();
 renderAnalysis();
 applyCollapseState();
