@@ -736,11 +736,11 @@ const WC_MATCHES = [
   {d:"2026-06-20",t:"16:00 UTC-4",h:"Germany",a:"Ivory Coast",g:"E",hs:2,as:1,ht:[1,0]},
   {d:"2026-06-20",t:"12:00 UTC-5",h:"Netherlands",a:"Sweden",g:"F",hs:1,as:1,ht:[0,1]},
   {d:"2026-06-20",t:"19:00 UTC-5",h:"Ecuador",a:"Curacao",g:"E",hs:3,as:0,ht:[1,0]},
-  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:4,ht:[0,0]},
-  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G",hs:2,as:2},
-  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H",hs:4,as:0},
-  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G",hs:1,as:3},
-  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H",hs:2,as:2},
+  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:1,ht:[0,0]},
+  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G"},
+  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H"},
+  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G"},
+  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H"},
   {d:"2026-06-22",t:"17:00 UTC-4",h:"France",a:"Iraq",g:"I"},
   {d:"2026-06-22",t:"20:00 UTC-4",h:"Norway",a:"Senegal",g:"I"},
   {d:"2026-06-22",t:"12:00 UTC-5",h:"Argentina",a:"Austria",g:"J"},
@@ -807,6 +807,8 @@ function loadScheduleData() {
     };
     } catch(e) { return null; }
   }).filter(Boolean);
+  // Sort by date, then by time within each date
+  matches.sort(function(a,b) { return (a.displayDate||a.time) - (b.displayDate||b.time); });
   renderAll();
 }
 function processScoreboard(data) {
