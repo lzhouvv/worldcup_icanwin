@@ -734,16 +734,16 @@ const WC_MATCHES = [
   {d:"2026-06-19",t:"20:30 UTC-4",h:"Brazil",a:"Haiti",g:"C",hs:3,as:0,ht:[3,0]},
   {d:"2026-06-19",t:"20:00 UTC-7",h:"Turkey",a:"Paraguay",g:"D",hs:0,as:1,ht:[0,1]},
   {d:"2026-06-20",t:"16:00 UTC-4",h:"Germany",a:"Ivory Coast",g:"E",hs:2,as:1,ht:[1,0]},
-  {d:"2026-06-20",t:"12:00 UTC-5",h:"Netherlands",a:"Sweden",g:"F",hs:1,as:1,ht:[0,1]},
-  {d:"2026-06-20",t:"19:00 UTC-5",h:"Ecuador",a:"Curacao",g:"E",hs:3,as:0,ht:[1,0]},
-  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:1,ht:[0,0]},
-  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G"},
-  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H"},
-  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G"},
-  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H"},
-  {d:"2026-06-22",t:"17:00 UTC-4",h:"France",a:"Iraq",g:"I"},
-  {d:"2026-06-22",t:"20:00 UTC-4",h:"Norway",a:"Senegal",g:"I"},
-  {d:"2026-06-22",t:"12:00 UTC-5",h:"Argentina",a:"Austria",g:"J"},
+  {d:"2026-06-20",t:"12:00 UTC-5",h:"Netherlands",a:"Sweden",g:"F",hs:5,as:1,ht:[2,0]},
+  {d:"2026-06-20",t:"19:00 UTC-5",h:"Ecuador",a:"Curacao",g:"E",hs:0,as:0,ht:[0,0]},
+  {d:"2026-06-20",t:"22:00 UTC-6",h:"Tunisia",a:"Japan",g:"F",hs:0,as:4,ht:[0,2]},
+  {d:"2026-06-21",t:"12:00 UTC-7",h:"Belgium",a:"Iran",g:"G",hs:0,as:0,ht:[0,0]},
+  {d:"2026-06-21",t:"12:00 UTC-4",h:"Spain",a:"Saudi Arabia",g:"H",hs:4,as:0,ht:[3,0]},
+  {d:"2026-06-21",t:"18:00 UTC-7",h:"New Zealand",a:"Egypt",g:"G",hs:1,as:3,ht:[1,0]},
+  {d:"2026-06-21",t:"18:00 UTC-4",h:"Uruguay",a:"Cape Verde",g:"H",hs:2,as:2,ht:[2,1]},
+  {d:"2026-06-22",t:"17:00 UTC-4",h:"France",a:"Iraq",g:"I",hs:3,as:0,ht:[1,0]},
+  {d:"2026-06-22",t:"20:00 UTC-4",h:"Norway",a:"Senegal",g:"I",hs:3,as:2,ht:[1,0]},
+  {d:"2026-06-22",t:"12:00 UTC-5",h:"Argentina",a:"Austria",g:"J",hs:2,as:0,ht:[1,0]},
   {d:"2026-06-22",t:"20:00 UTC-7",h:"Jordan",a:"Algeria",g:"J"},
   {d:"2026-06-23",t:"12:00 UTC-5",h:"Portugal",a:"Uzbekistan",g:"K"},
   {d:"2026-06-23",t:"16:00 UTC-4",h:"England",a:"Ghana",g:"L"},
@@ -811,6 +811,37 @@ function loadScheduleData() {
   matches.sort(function(a,b) { return (a.displayDate||a.time) - (b.displayDate||b.time); });
   renderAll();
 }
+function processOpenfootballData(data) {
+  var newMatches = [];
+  (data.matches || []).forEach(function(m) {
+    if (m.team1 === '2A' || m.team1 === 'W101') return; // skip knockout placeholders
+    var home = m.team1 || '', away = m.team2 || '', dateStr = m.date || '', group = m.group || '';
+    var hs = m.score?.ft?.[0] !== undefined ? m.score.ft[0] : undefined;
+    var as = m.score?.ft?.[1] !== undefined ? m.score.ft[1] : undefined;
+    var ht = m.score?.ht || null;
+    if (!home || !away || !dateStr) return;
+    var time = parseTimeToBJ(dateStr, m.time);
+    var fin = hs !== undefined && as !== undefined;
+    var htStr = ht ? ht[0]+'-'+ht[1] : null;
+    newMatches.push({
+      id:'live_'+newMatches.length, group: group ? group.replace(/Group\s+([A-Z])/i,'$1组') : '',
+      home: cnName(home), away: cnName(away), homeEn: home, awayEn: away,
+      homeAbbr:'', awayAbbr:'', homeLogo:'', awayLogo:'',
+      time:time, displayDate:new Date(dateStr+'T12:00:00Z'), displayTime: m.time?.match(/(\d+):(\d+)/)?.[0]||'12:00',
+      odds:{3:null,1:null,0:null},
+      status:fin?'finished':(m.score?.ft?'live':'upcoming'),
+      homeScore:fin?String(hs):'0', awayScore:fin?String(as):'0',
+      result:fin?(hs>as?'3':(hs<as?'0':'1')):null,
+      htResult:ht?(ht[0]>ht[1]?'3':(ht[0]<ht[1]?'0':'1')):null,
+      htScoreStr:htStr, _htConfirmed:!!htStr,
+    });
+  });
+  if (newMatches.length > 0) {
+    matches = newMatches;
+    matches.sort(function(a,b) { return (a.displayDate||a.time) - (b.displayDate||b.time); });
+    renderAll();
+  }
+}
 function processScoreboard(data) {
   var raw = data.events || [], processed = [];
   raw.forEach(function(ev) {
@@ -833,22 +864,29 @@ function processScoreboard(data) {
   if (processed.length) { matches = processed; renderAll(); }
 }
 async function fetchData(date) {
-  loadScheduleData();
-  var badge = document.getElementById('statusBadge');
   var targetDate = date || currentDate;
   var ds = targetDate.getFullYear().toString() + String(targetDate.getMonth()+1).padStart(2,'0') + String(targetDate.getDate()).padStart(2,'0');
-  var proxies = ['https://api.allorigins.win/raw?url=', 'https://corsproxy.io/?url=', 'https://api.allorigins.win/get?url=', 'https://thingproxy.freeboard.io/fetch/', 'https://corsproxy.io/?'];
-  for (var pi = 0; pi < proxies.length; pi++) {
-    try {
-      var r = await fetch(proxies[pi] + encodeURIComponent('https://site.web.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=' + ds), { signal: AbortSignal.timeout(5000) });
-      if (!r.ok) continue;
-      var text = await r.text(); if (!text || text.length < 50) continue;
-      var data;
-      try { data = JSON.parse(text); } catch(ee) { try { var w = JSON.parse(text); if (w?.contents) data = JSON.parse(w.contents); else continue; } catch(ee2) { continue; } }
-      if (data && data.events && data.events.length > 0) { processScoreboard(data); if (badge) badge.className = 'status-badge'; return; }
-    } catch(e) {}
-  }
-  if (badge) badge.className = 'status-badge';
+  var badge = document.getElementById('statusBadge');
+  
+  // Try openfootball JSON first (no CORS needed for raw.githubusercontent.com)
+  try {
+    var r = await fetch('https://raw.githubusercontent.com/openfootball/world-cup.json/master/2026/worldcup.json', { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      var text = await r.text();
+      if (text && text.length > 100) {
+        var data = JSON.parse(text);
+        if (data && data.matches) {
+          processOpenfootballData(data);
+          if (badge) { badge.className = 'status-badge'; badge.innerHTML = '<span class="dot"></span>'; }
+          return;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // Fallback: load built-in data
+  loadScheduleData();
+  if (badge) { badge.className = 'status-badge'; badge.innerHTML = '<span class="dot"></span>'; }
 }
 function exportData() {
   try {
@@ -1056,7 +1094,7 @@ function renderMatches() {
       <td><span class="team-name">${hf}${m.home}</span></td>
       <td style="text-align:center;padding-left:32px;padding-right:32px;"><span class="vs">VS</span></td>
       <td style="padding-right:32px;"><span class="team-name">${af}${m.away}</span></td>
-      <td style="text-align:center;padding-right:32px;"><span class="score-main">${_manualScores[m.id] ? (_manualScores[m.id].ftH+':'+_manualScores[m.id].ftA) : (fin||liv ? m.homeScore+':'+m.awayScore : '—')}</span></td>
+      <td style="text-align:center;padding-right:32px;"><span class="score-main">${_manualScores[m.id] ? (_manualScores[m.id].ftH+':'+_manualScores[m.id].ftA) : (fin||liv ? m.homeScore+':'+m.awayScore : '<span style="color:var(--text2);font-size:.65rem;cursor:pointer;" onclick="event.stopPropagation();openScoreDialog(\''+m.id+'\')">— 设置</span>')}</span></td>
       <td style="text-align:center;">${_manualScores[m.id] ? `<span style="font-size:.7rem;color:var(--accent);">${_manualScores[m.id].htH||0}-${_manualScores[m.id].htA||0}</span>` : (m.htScoreStr ? `<span style="font-size:.7rem;color:var(--text2);">${m.htScoreStr}</span>` : '<span style="font-size:.65rem;color:var(--text2);">—</span>')}</td>
       <td style="text-align:center;vertical-align:middle;">${fin||liv?`<span class="btn btn-sm" onclick="event.stopPropagation();openScoreDialog('${m.id}')" title="手动设置比分" style="padding:0 4px;font-size:.6rem;cursor:pointer;color:${_manualScores[m.id]?'var(--accent)':'var(--text2)'};">${_manualScores[m.id]?'📝✓':'📝'}</span>`:'<span style="color:var(--text2);font-size:.6rem;">—</span>'}</td>
       <td class="odds-cell odds-th">${o3}</td>
@@ -1800,6 +1838,7 @@ function renderRecords() {
   }
   if (!filtered.length && savedRecords.length > 0 && el._showAll) filtered = savedRecords;
   if (el._showAll) el._showAll = false;
+  if (!filtered.length && savedRecords.length > 0) filtered = savedRecords;
   if (!filtered.length) {
     el.innerHTML = '<div class="empty-pad"><div style="font-size:1.3rem;margin-bottom:4px;">📋</div><div>该日无投注记录</div></div>';
     return;
@@ -2093,15 +2132,17 @@ function goToToday() {
   _collapseState._date = currentDate.toISOString();
   saveCollapseState();
   updateDatePicker();
+  loadScheduleData();
   renderRecords();
   fetchData(currentDate);
 }
 function updateDatePicker() {
   // Display Beijing date
-  const m = String(currentDate.getMonth()+1).padStart(2,'0');
-  const d = String(currentDate.getDate()).padStart(2,'0');
-  const el = document.getElementById('dateLabel');
-  if (el) el.textContent = `${m}/${d}`;
+  var f = new Intl.DateTimeFormat('en', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' });
+  var p = f.formatToParts(new Date(currentDate));
+  var get = function(t) { return p.find(function(x) { return x.type === t; })?.value || '00'; };
+  var el = document.getElementById('dateLabel');
+  if (el) el.textContent = get('month') + '/' + get('day');
 }
 
 // =====================================================================
@@ -2120,6 +2161,8 @@ renderRecords();
 renderAnalysis();
 applyCollapseState();
 fetchData(currentDate);
+// Auto-refresh every 60 seconds for latest scores
+setInterval(function() { fetchData(currentDate); }, 60000);
 </script>
 </body>
 </html>
